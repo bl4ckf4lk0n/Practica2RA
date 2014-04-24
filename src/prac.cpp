@@ -114,7 +114,7 @@ pcl::PointCloud<pcl::PointXYZ>::Ptr cloud(new pcl::PointCloud <pcl::PointXYZ>);
 int main(int argc, char** argv){
   ros::init(argc, argv, "sub_pcl");
   ros::NodeHandle nh;
-  ros::Subscriber sub = nh.subscribe<PointCloud>("points2", 1, callback);
+  ros::Subscriber sub = nh.subscribe<PointCloud>("/camera/depth/points", 1, callback);
   ros::spin();
 }
 
