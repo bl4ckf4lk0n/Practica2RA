@@ -21,6 +21,7 @@ typedef pcl::PointCloud<pcl::PointXYZ> PointCloud;
 void callback(const PointCloud::ConstPtr& msg)
 {
   printf ("Cloud: width = %d, height = %d\n", msg->width, msg->height);
+
   BOOST_FOREACH (const pcl::PointXYZ& pt, msg->points)
     printf ("\t(%f, %f, %f)\n", pt.x, pt.y, pt.z);
 }
@@ -114,7 +115,8 @@ pcl::PointCloud<pcl::PointXYZ>::Ptr cloud(new pcl::PointCloud <pcl::PointXYZ>);
 int main(int argc, char** argv){
   ros::init(argc, argv, "sub_pcl");
   ros::NodeHandle nh;
-  ros::Subscriber sub = nh.subscribe<PointCloud>("/camera/depth/points", 1, callback);
+  //ros::Subscriber sub = nh.subscribe<PointCloud>("/camera/depth/points", 1, callback);
+  ros::Subscriber sub = nh.subscribe<PointCloud>("/camera/depth/image", 1, callbackPCL);
   ros::spin();
 }
 
@@ -136,6 +138,8 @@ int publicar(int argc, char** argv)
   cloud->header.frame_id="frameMapa";
   pub.publish (*cloud);
 
+CAPTURAR FEATURES Y KEYPOINTS
+//http://www.pointclouds.org/assets/iros2011/features.pdf 
 
   /*ros::Publisher pub = nh.advertise<PointCloud> ("points2", 1);
 
