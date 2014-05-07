@@ -77,7 +77,7 @@ pcl::PointCloud<pcl::PointXYZRGB>::Ptr getCloudfromColorAndDepth(const cv::Mat i
 
 void processRegistration(){
   	ros::NodeHandle nh;
-	PointCloud p = getCloudfromColorAndDepth(imageColormsg->image, depthImageFloat);
+	pcl::PointCloud<pcl::PointXYZRGB>::Ptr p = getCloudfromColorAndDepth(imageColormsg->image, depthImageFloat);
 	ros::Publisher pub = nh.advertise<PointCloud> ("reconstruction", 1);
 	pcl::PointCloud<pcl::PointXYZ>::Ptr cloud(new pcl::PointCloud <pcl::PointXYZ>);
 
@@ -89,6 +89,25 @@ void processRegistration(){
 
 	cloud->header.frame_id="frameMapa";
 	pub.publish (*cloud);
+
+  pcl::visualization::PCLVisualizer::Ptr viewer;//objeto viewer
+  viewer= pcl::visualization::PCLVisualizer::Ptr(new pcl::visualization::PCLVisualizer ("3D Viewer"));
+
+  viewer->setBackgroundColor (0, 0, 0);
+
+  //viewer->addCoordinateSystem (1.0); //podriamos dibujar un sistema de coordenadas si quisieramos
+
+  viewer->initCameraParameters ();
+  pcl::visualization::PointCloudColorHandlerRGBField<pcl::PointXYZRGB> rgb(p);   //esto es el manejador de color de la nube "cloud"
+
+  if (!viewer->updatePointCloud (p,rgb, "cloud")) //intento actualizar la nube y si no existe la creo.
+    viewer->addPointCloud(p,rgb,"cloud");
+
+  while (!viewer->wasStopped())
+  {
+    viewer->spinOnce (100);
+    boost::this_thread::sleep (boost::posix_time::microseconds (10));
+  }
 }
 
 void imageCbdepth(const sensor_msgs::ImageConstPtr& msg)
@@ -174,7 +193,7 @@ void callback(const PointCloud::ConstPtr& msg)
 int main(int argc, char** argv){
   ros::init(argc, argv, "sub_pcl");
   ros::NodeHandle nh;
-  ros::Subscriber sub2 = nh.subscribe("/camera/RGB/image_color", 1, imageCb);
+  ros::Subscriber sub2 = nh.subscribe("/camera/rgb/image_color", 1, imageCb);
   ros::Subscriber sub = nh.subscribe("/camera/depth/image", 1, imageCbdepth);
   ros::spin();
 }
