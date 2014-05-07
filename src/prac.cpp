@@ -50,68 +50,106 @@ pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_tgt (new pcl::PointCloud<pcl::PointXYZ
 pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_tmp (new pcl::PointCloud<pcl::PointXYZ>); 
 
 
-pcl::PointCloud<pcl::PointXYZRGB>::Ptr getCloudfromColorAndDepth(const cv::Mat imageColor, const float* depthImage){
+
+class Prac2 {
+  ros::Subscriber imgSub;
+  ros::Subscriber depthSub;
+  pcl::visualization::PCLVisualizer::Ptr viewer;//objeto viewer
+
+  public:Prac2(ros::NodeHandle& nh) { 
+
+    imgSub = nh.subscribe("/camera/rgb/image_color", 1, &Prac2::imageCb, this);
+    depthSub = nh.subscribe("/camera/depth/image", 1, &Prac2::imageCbdepth, this);
+
+    viewer= pcl::visualization::PCLVisualizer::Ptr(new pcl::visualization::PCLVisualizer ("3D Viewer"));
+    viewer->setBackgroundColor (0, 0, 0);
+    viewer->initCameraParameters ();
+  };
 
 
-    pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud(new pcl::PointCloud <pcl::PointXYZRGB>);
-    cloud->height = 480;
-    cloud->width = 640;
-    cloud->is_dense = false;
+  void bucle() {
+    ros::Rate rate(1); 
+    while (ros::ok()) {
+      ros::spinOnce(); // Se procesarán todas las llamadas pendientes, es decir, llamará a callBack
+      rate.sleep(); // Espera a que finalice el ciclo
+    }
+  };
 
-    cloud->points.resize(cloud->height * cloud->width);
+  void imageCbdepth(const sensor_msgs::ImageConstPtr& msg)
+  {
+    std::cerr<<" depthcb: "<<msg->header.frame_id<<" : "<<msg->header.seq<<" : "<<msg->header.stamp<<std::endl;
+    depthImageFloat = reinterpret_cast<const float*>(&msg->data[0]);
+    depthreceived=true;
+    if(imagereceived && depthreceived)
+    processRegistration();
 
-    register float constant = 0.0019047619;
-    cloud->header.frame_id = "/openni_rgb_optical_frame";
+  }
 
-    register int centerX = (cloud->width >> 1);
-    int centerY = (cloud->height >> 1);
 
-    float bad_point = std::numeric_limits<float>::quiet_NaN();
-
-    register int depth_idx = 0;
-    int i,j;
-    for (int v = -centerY,j=0; v < centerY; ++v,++j)
+  void imageCb(const sensor_msgs::ImageConstPtr& msg)
+  {
+    try
     {
-        for (register int u = -centerX,i=0; u < centerX; ++u, ++depth_idx,++i)
-        {
-          pcl::PointXYZRGB& pt = cloud->points[depth_idx];
+      imageColormsg = cv_bridge::toCvCopy(msg, enc::BGR8);
+    }
+    catch (cv_bridge::Exception& e)
+    {
+      ROS_ERROR("cv_bridge exception: %s", e.what());
+      return;
+    }
 
-        float depthimagevalue=depthImage[depth_idx];
+    std::cerr<<" imagecb: "<<msg->header.frame_id<<" : "<<msg->header.seq<<" : "<<msg->header.stamp<<std::endl;
+    imagereceived=true;
 
-        if (depthimagevalue == 0)
-        {
-        // not valid
-        pt.x = pt.y = pt.z = bad_point;
-        continue;
-          }
-        pt.z = depthimagevalue;
-          pt.x = u * pt.z * constant;
-          pt.y = v * pt.z * constant;
+    if(imagereceived && depthreceived)
+      processRegistration();
+  }
 
-        const Point3_<uchar>* p = imageColor.ptr<Point3_<uchar> >(j,i);
-        pt.r=p->z;
-        pt.g=p->y;
-        pt.b=p->x;
-        }
-      }
-    return cloud;
-}
+  void processRegistration2()
+  {
+    ros::NodeHandle nh;
+    pcl::PointCloud<pcl::PointXYZRGB>::Ptr p = getCloudfromColorAndDepth(imageColormsg->image, depthImageFloat);
+    ros::Publisher pub = nh.advertise<PointCloud> ("reconstruction", 1);
+    pcl::PointCloud<pcl::PointXYZ>::Ptr cloud(new pcl::PointCloud <pcl::PointXYZ>);
 
-void processRegistration(){
- //  	ros::NodeHandle nh;
-	
-	
-	// ros::Publisher pub = nh.advertise<PointCloud> ("reconstruction", 1);
-	// pcl::PointCloud<pcl::PointXYZ>::Ptr cloud(new pcl::PointCloud <pcl::PointXYZ>);
+    static tf::TransformBroadcaster br;
+    tf::Transform transform;
+    transform.setOrigin( tf::Vector3(0, 0, 0.0) );
+    transform.setRotation( tf::Quaternion(0, 0, 0) );
+    br.sendTransform(tf::StampedTransform(transform, ros::Time::now(), "frameMapa", "base_link"));
 
-	// static tf::TransformBroadcaster br;
- //  	tf::Transform transform;
- //  	transform.setOrigin( tf::Vector3(0, 0, 0.0) );
- //  	transform.setRotation( tf::Quaternion(0, 0, 0) );
- //  	br.sendTransform(tf::StampedTransform(transform, ros::Time::now(), "frameMapa", "base_link"));
+    cloud->header.frame_id="frameMapa";
+    pub.publish (*cloud);
 
-	// cloud->header.frame_id="frameMapa";
-	// pub.publish (*cloud);
+    /*Visualizar*/
+    pcl::visualization::PointCloudColorHandlerRGBField<pcl::PointXYZRGB> rgb(p);   //esto es el manejador de color de la nube "cloud"
+
+    if (!viewer->updatePointCloud (p,rgb, "cloud")) //intento actualizar la nube y si no existe la creo.
+      viewer->addPointCloud(p,rgb,"cloud");
+
+    while (!viewer->wasStopped())
+    {
+      viewer->spinOnce (100);
+      boost::this_thread::sleep (boost::posix_time::microseconds (10));
+    }
+  }
+
+  void processRegistration(){
+
+   //   ros::NodeHandle nh;
+    
+    
+    // ros::Publisher pub = nh.advertise<PointCloud> ("reconstruction", 1);
+    // pcl::PointCloud<pcl::PointXYZ>::Ptr cloud(new pcl::PointCloud <pcl::PointXYZ>);
+
+    // static tf::TransformBroadcaster br;
+ //     tf::Transform transform;
+ //     transform.setOrigin( tf::Vector3(0, 0, 0.0) );
+ //     transform.setRotation( tf::Quaternion(0, 0, 0) );
+ //     br.sendTransform(tf::StampedTransform(transform, ros::Time::now(), "frameMapa", "base_link"));
+
+    // cloud->header.frame_id="frameMapa";
+    // pub.publish (*cloud);
 
  //  pcl::visualization::PCLVisualizer::Ptr viewer;//objeto viewer
  //  viewer= pcl::visualization::PCLVisualizer::Ptr(new pcl::visualization::PCLVisualizer ("3D Viewer"));
@@ -156,7 +194,7 @@ void processRegistration(){
                 //Properties for al viewports 
                         MView->setPointCloudRenderingProperties (pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 1, "source"); 
                         MView->setPointCloudRenderingProperties (pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 1, "target"); 
-                        //MView->setPointCloudRenderingProperties (pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 1, "target2");	
+                        //MView->setPointCloudRenderingProperties (pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 1, "target2");    
                         
         //remove NAN-Points 
                 std::vector<int> indices1,indices2; 
@@ -172,8 +210,8 @@ void processRegistration(){
                 grid.setInputCloud (cloud_src); 
                 grid.filter (*ds_src); 
                 grid.setInputCloud (cloud_tgt); 
-                grid.filter (*ds_tgt);	
-                PCL_INFO ("	Downsampling finished \n"); 
+                grid.filter (*ds_tgt);  
+                PCL_INFO (" Downsampling finished \n"); 
 
         // Normal-Estimation 
                 PCL_INFO ("Normal Estimation \n"); 
@@ -185,7 +223,7 @@ void processRegistration(){
                 
                 pcl::NormalEstimation<pcl::PointXYZ, pcl::Normal> ne; 
                 //Source-Cloud 
-                PCL_INFO ("	Normal Estimation - Source \n");	
+                PCL_INFO (" Normal Estimation - Source \n");    
                 ne.setInputCloud (ds_src); 
                 ne.setSearchSurface (cloud_src); 
                 ne.setSearchMethod (tree_src); 
@@ -193,7 +231,7 @@ void processRegistration(){
                 ne.compute (*norm_src); 
 
                 //Target-Cloud 
-                PCL_INFO ("	Normal Estimation - Target \n"); 
+                PCL_INFO (" Normal Estimation - Target \n"); 
                 ne.setInputCloud (ds_tgt); 
                 ne.setSearchSurface (cloud_tgt); 
                 ne.setSearchMethod (tree_tgt); 
@@ -217,9 +255,9 @@ void processRegistration(){
                 int borderSize = 1; 
 
                 //Konvertieren der Point-Cloud in ein Range-Image d.h Cloud mit Range-Value und 3D-Koordinate 
-                PCL_INFO ("	NARF - Creating Range-Images\n"); 
+                PCL_INFO (" NARF - Creating Range-Images\n"); 
                 range_src.createFromPointCloud (*cloud_src, angularResolution, maxAngleWidth, maxAngleHeight, sensorPose, coordinate_frame, noiseLevel, minRange, borderSize); 
-                range_tgt.createFromPointCloud (*cloud_tgt, angularResolution, maxAngleWidth, maxAngleHeight, sensorPose, coordinate_frame, noiseLevel, minRange, borderSize);	
+                range_tgt.createFromPointCloud (*cloud_tgt, angularResolution, maxAngleWidth, maxAngleHeight, sensorPose, coordinate_frame, noiseLevel, minRange, borderSize);  
 
                 //Visualisierung Range-Images 
                 pcl::visualization::RangeImageVisualizer range_vis1 ("Range Image"); 
@@ -235,17 +273,17 @@ void processRegistration(){
                 narf_keypoint_src.setRangeImage (&range_src); 
                 narf_keypoint_src.getParameters ().support_size = support_size; 
                 pcl::PointCloud<int> keypoints_ind_src; 
-                PCL_INFO ("	NARF - Compute Keypoints - Source\n"); 
+                PCL_INFO (" NARF - Compute Keypoints - Source\n"); 
                 narf_keypoint_src.compute (keypoints_ind_src); 
-                PCL_INFO ("	NARF - Found %d Keypoints in Source\n", keypoints_ind_src.size()); 
+                PCL_INFO (" NARF - Found %d Keypoints in Source\n", keypoints_ind_src.size()); 
                         //Keypoints Target 
                 pcl::NarfKeypoint narf_keypoint_tgt (&range_image_ba); 
                 narf_keypoint_tgt.setRangeImage (&range_tgt); 
                 narf_keypoint_tgt.getParameters ().support_size = support_size; 
                 pcl::PointCloud<int> keypoints_ind_tgt; 
-                PCL_INFO ("	NARF - Compute Keypoints - Target\n"); 
+                PCL_INFO (" NARF - Compute Keypoints - Target\n"); 
                 narf_keypoint_tgt.compute (keypoints_ind_tgt); 
-                PCL_INFO ("	NARF - Found %d Keypoints in Target\n", keypoints_ind_tgt.size()); 
+                PCL_INFO (" NARF - Found %d Keypoints in Target\n", keypoints_ind_tgt.size()); 
         //Umwandlung Keypoints von pcl::PointCloud<int> zu pcl::PointCloud<XYZ>
                 pcl::PointCloud<pcl::PointXYZ>::Ptr keypoints_src (new pcl::PointCloud<pcl::PointXYZ>); 
                 pcl::PointCloud<pcl::PointXYZ>::Ptr keypoints_tgt (new pcl::PointCloud<pcl::PointXYZ>); 
@@ -253,7 +291,7 @@ void processRegistration(){
                 keypoints_src->width = keypoints_ind_src.points.size(); 
                 keypoints_src->height = 1; 
                 keypoints_src->is_dense = false; 
-                keypoints_src->points.resize (keypoints_src->width * keypoints_src->height);	
+                keypoints_src->points.resize (keypoints_src->width * keypoints_src->height);    
                                 
                 keypoints_tgt->width = keypoints_ind_tgt.points.size(); 
                 keypoints_tgt->height = 1; 
@@ -262,9 +300,9 @@ void processRegistration(){
                 
                 int ind_count=0; 
                 
-                //source XYZ-CLoud	
+                //source XYZ-CLoud  
                 for (size_t i = 0; i < keypoints_ind_src.points.size(); i++) 
-                {	
+                {   
                         ind_count = keypoints_ind_src.points[i]; 
                         //float x = range_src.points[ind_count].x; 
                         
@@ -275,7 +313,7 @@ void processRegistration(){
 
                 //target XYZ-Cloud 
                 for (size_t i = 0; i < keypoints_ind_tgt.points.size(); i++) 
-                {	
+                {   
                         ind_count = keypoints_ind_tgt.points[i]; 
                         //float x = range_src.points[ind_count].x; 
                         
@@ -287,16 +325,16 @@ void processRegistration(){
                 
         //Feature-Descriptor 
                 PCL_INFO ("FPFH - Feature Descriptor\n"); 
-                //FPFH	
+                //FPFH  
                         //FPFH Source 
                         //pcl::FPFHEstimation<pcl::PointXYZ, pcl::Normal, pcl::FPFHSignature33> fpfh_est_src; 
                         //pcl::search::KdTree<pcl::PointXYZ>::Ptr tree_fpfh_src (new pcl::search::KdTree<pcl::PointXYZ>); 
                         //fpfh_est_src.setSearchSurface (ds_src);//<-------------- Use All Points for analyzing  the local structure of the cloud 
                         //fpfh_est_src.setInputCloud (keypoints_src); //<------------- But only compute features at the key-points 
                         //fpfh_est_src.setInputNormals (norm_src); 
-                        //fpfh_est_src.setRadiusSearch (0.05);	
+                        //fpfh_est_src.setRadiusSearch (0.05);  
                         //pcl::PointCloud<pcl::FPFHSignature33>::Ptr fpfh_src (new pcl::PointCloud<pcl::FPFHSignature33>); 
-                        //PCL_INFO ("	FPFH - Compute Source\n"); 
+                        //PCL_INFO ("   FPFH - Compute Source\n"); 
                         //fpfh_est_src.compute (*fpfh_src); 
                 
                         ////FPFH Target 
@@ -307,9 +345,9 @@ void processRegistration(){
                         //fpfh_est_tgt.setInputNormals (norm_tgt); 
                         //fpfh_est_tgt.setRadiusSearch (0.05); 
                         //pcl::PointCloud<pcl::FPFHSignature33>::Ptr fpfh_tgt (new pcl::PointCloud<pcl::FPFHSignature33>); 
-                        //PCL_INFO ("	FPFH - Compute Target\n"); 
+                        //PCL_INFO ("   FPFH - Compute Target\n"); 
                         //fpfh_est_tgt.compute (*fpfh_tgt); 
-                        //PCL_INFO ("	FPFH - finished\n"); 
+                        //PCL_INFO ("   FPFH - finished\n"); 
                 //PFH-Source 
                 PCL_INFO ("PFH - started\n"); 
                 pcl::PFHEstimation<pcl::PointXYZ, pcl::Normal, pcl::PFHSignature125> pfh_est_src; 
@@ -320,9 +358,9 @@ void processRegistration(){
                 pfh_est_src.setInputNormals (norm_src); 
                 pfh_est_src.setInputCloud (keypoints_src); 
                 pcl::PointCloud<pcl::PFHSignature125>::Ptr pfh_src (new pcl::PointCloud<pcl::PFHSignature125>); 
-                PCL_INFO ("	PFH - Compute Source\n"); 
+                PCL_INFO (" PFH - Compute Source\n"); 
                 pfh_est_src.compute (*pfh_src); 
-                PCL_INFO ("	PFH - finished\n"); 
+                PCL_INFO (" PFH - finished\n"); 
                 //PFH-Target 
                 pcl::PFHEstimation<pcl::PointXYZ, pcl::Normal, pcl::PFHSignature125> pfh_est_tgt; 
                 pcl::search::KdTree<pcl::PointXYZ>::Ptr tree_pfh_tgt (new pcl::search::KdTree<pcl::PointXYZ>()); 
@@ -332,9 +370,9 @@ void processRegistration(){
                 pfh_est_tgt.setInputNormals (norm_tgt); 
                 pfh_est_tgt.setInputCloud (keypoints_tgt); 
                 pcl::PointCloud<pcl::PFHSignature125>::Ptr pfh_tgt (new pcl::PointCloud<pcl::PFHSignature125>); 
-                PCL_INFO ("	PFH - Compute Target\n"); 
+                PCL_INFO (" PFH - Compute Target\n"); 
                 pfh_est_tgt.compute (*pfh_tgt); 
-                PCL_INFO ("	PFH - finished\n"); 
+                PCL_INFO (" PFH - finished\n"); 
 
         //Correspondence Estimation 
                 PCL_INFO ("Correspondence Estimation\n"); 
@@ -345,8 +383,8 @@ void processRegistration(){
                 //pcl::Correspondences cor_all; 
                 //Pointer erzeugen 
                 boost::shared_ptr<pcl::Correspondences> cor_all_ptr (new pcl::Correspondences); 
-                corEst.determineCorrespondences (*cor_all_ptr);	
-                PCL_INFO (" Correspondence Estimation - Found %d Correspondences\n", cor_all_ptr->size());	
+                corEst.determineCorrespondences (*cor_all_ptr); 
+                PCL_INFO (" Correspondence Estimation - Found %d Correspondences\n", cor_all_ptr->size());  
                 
         //Reject false Correspondences 
                 Eigen::Matrix4f transformation; 
@@ -367,7 +405,7 @@ void processRegistration(){
                 boost::shared_ptr<pcl::Correspondences> cor_inliers_ptr (new pcl::Correspondences); 
                 sac.getCorrespondences (*cor_inliers_ptr); 
                 //int sac_size = cor_inliers_ptr->size(); 
-                PCL_INFO ("	RANSAC: %d Correspondences Remaining\n", cor_inliers_ptr->size ()); 
+                PCL_INFO (" RANSAC: %d Correspondences Remaining\n", cor_inliers_ptr->size ()); 
 
                 transformation = sac.getBestTransformation(); 
                 
@@ -380,7 +418,7 @@ void processRegistration(){
                 MView->addPointCloud (cloud_tmp, green, "tmp", v2); 
                 MView->addPointCloud (cloud_tgt, red, "target_2", v2); 
                 MView->setPointCloudRenderingProperties (pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 1, "tmp"); 
-                MView->setPointCloudRenderingProperties (pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 1, "target_2");	
+                MView->setPointCloudRenderingProperties (pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 1, "target_2"); 
                 
                 //Zeitdifferenz 
                 end = time(0); 
@@ -392,8 +430,55 @@ void processRegistration(){
                         { 
                                 MView->spinOnce(100); 
                         } 
+
+                    }
+
                         
 
+  pcl::PointCloud<pcl::PointXYZRGB>::Ptr getCloudfromColorAndDepth(const cv::Mat imageColor, const float* depthImage)
+  {
+    pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud(new pcl::PointCloud <pcl::PointXYZRGB>);
+    cloud->height = 480;
+    cloud->width = 640;
+    cloud->is_dense = false;
+
+    cloud->points.resize(cloud->height * cloud->width);
+
+    register float constant = 0.0019047619;
+    cloud->header.frame_id = "/openni_rgb_optical_frame";
+
+    register int centerX = (cloud->width >> 1);
+    int centerY = (cloud->height >> 1);
+
+    float bad_point = std::numeric_limits<float>::quiet_NaN();
+
+    register int depth_idx = 0;
+    int i,j;
+    for (int v = -centerY,j=0; v < centerY; ++v,++j)
+    {
+      for (register int u = -centerX,i=0; u < centerX; ++u, ++depth_idx,++i)
+      {
+        pcl::PointXYZRGB& pt = cloud->points[depth_idx];
+
+        float depthimagevalue=depthImage[depth_idx];
+
+        if (depthimagevalue == 0)
+        {
+          // not valid
+          pt.x = pt.y = pt.z = bad_point;
+          continue;
+        }
+        pt.z = depthimagevalue;
+        pt.x = u * pt.z * constant;
+        pt.y = v * pt.z * constant;
+
+        const Point3_<uchar>* p = imageColor.ptr<Point3_<uchar> >(j,i);
+        pt.r=p->z;
+        pt.g=p->y;
+        pt.b=p->x;
+      }
+    }
+    return cloud;
 }
 
 void imageCbdepth(const sensor_msgs::ImageConstPtr& msg)
@@ -509,41 +594,4 @@ int main(int argc, char** argv){
   ros::Subscriber sub2 = nh.subscribe("/camera/rgb/image_color", 1, imageCb);
   ros::Subscriber sub = nh.subscribe("/camera/depth/image", 1, imageCbdepth);
   ros::spin();
-}
-
-int publicar(int argc, char** argv)
-{
-  ros::init (argc, argv, "pub_pcl");
-  ros::NodeHandle nh;
-  ros::Publisher pub = nh.advertise<PointCloud> ("reconstruction", 1);	
-  pcl::PointCloud<pcl::PointXYZ>::Ptr cloud(new pcl::PointCloud <pcl::PointXYZ>);
-  
-  //para hacer no se qué del rviz
-  static tf::TransformBroadcaster br;
-  tf::Transform transform;
-  transform.setOrigin( tf::Vector3(0, 0, 0.0) );
-  transform.setRotation( tf::Quaternion(0, 0, 0) );
-  br.sendTransform(tf::StampedTransform(transform, ros::Time::now(), "frameMapa", "base_link"));
-
-  //publicar
-  cloud->header.frame_id="frameMapa";
-  pub.publish (*cloud);
-
-//http://www.pointclouds.org/assets/iros2011/features.pdf 
-
-  /*ros::Publisher pub = nh.advertise<PointCloud> ("points2", 1);
-
-  PointCloud::Ptr msg (new PointCloud);
-  msg->header.frame_id = "some_tf_frame";
-  msg->height = msg->width = 1;
-  msg->points.push_back (pcl::PointXYZ(1.0, 2.0, 3.0));
-
-  ros::Rate loop_rate(4);
-  while (nh.ok())
-  {
-    msg->header.stamp = ros::Time::now ();
-    pub.publish (msg);
-    ros::spinOnce ();
-    loop_rate.sleep ();
-  }*/
 }
