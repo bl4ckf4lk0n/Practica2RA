@@ -28,9 +28,92 @@ cv_bridge::CvImagePtr imageColormsg;
 bool depthreceived;
 bool imagereceived;
 
-pcl::PointCloud<pcl::PointXYZRGB>::Ptr getCloudfromColorAndDepth(const cv::Mat imageColor, const float* depthImage){
+
+class Prac2 {
+  ros::Subscriber imgSub;
+  ros::Subscriber depthSub;
+  pcl::visualization::PCLVisualizer::Ptr viewer;//objeto viewer
+
+  public:Prac2(ros::NodeHandle& nh) { 
+
+    imgSub = nh.subscribe("/camera/rgb/image_color", 1, &Prac2::imageCb, this);
+    depthSub = nh.subscribe("/camera/depth/image", 1, &Prac2::imageCbdepth, this);
+
+    viewer= pcl::visualization::PCLVisualizer::Ptr(new pcl::visualization::PCLVisualizer ("3D Viewer"));
+    viewer->setBackgroundColor (0, 0, 0);
+    viewer->initCameraParameters ();
+  };
 
 
+  void bucle() {
+    ros::Rate rate(1); 
+    while (ros::ok()) {
+      ros::spinOnce(); // Se procesarán todas las llamadas pendientes, es decir, llamará a callBack
+      rate.sleep(); // Espera a que finalice el ciclo
+    }
+  };
+
+  void imageCbdepth(const sensor_msgs::ImageConstPtr& msg)
+  {
+    std::cerr<<" depthcb: "<<msg->header.frame_id<<" : "<<msg->header.seq<<" : "<<msg->header.stamp<<std::endl;
+    depthImageFloat = reinterpret_cast<const float*>(&msg->data[0]);
+    depthreceived=true;
+    if(imagereceived && depthreceived)
+    processRegistration();
+
+  }
+
+
+  void imageCb(const sensor_msgs::ImageConstPtr& msg)
+  {
+    try
+    {
+      imageColormsg = cv_bridge::toCvCopy(msg, enc::BGR8);
+    }
+    catch (cv_bridge::Exception& e)
+    {
+      ROS_ERROR("cv_bridge exception: %s", e.what());
+      return;
+    }
+
+    std::cerr<<" imagecb: "<<msg->header.frame_id<<" : "<<msg->header.seq<<" : "<<msg->header.stamp<<std::endl;
+    imagereceived=true;
+
+    if(imagereceived && depthreceived)
+      processRegistration();
+  }
+
+  void processRegistration()
+  {
+    ros::NodeHandle nh;
+    pcl::PointCloud<pcl::PointXYZRGB>::Ptr p = getCloudfromColorAndDepth(imageColormsg->image, depthImageFloat);
+    ros::Publisher pub = nh.advertise<PointCloud> ("reconstruction", 1);
+    pcl::PointCloud<pcl::PointXYZ>::Ptr cloud(new pcl::PointCloud <pcl::PointXYZ>);
+
+    static tf::TransformBroadcaster br;
+    tf::Transform transform;
+    transform.setOrigin( tf::Vector3(0, 0, 0.0) );
+    transform.setRotation( tf::Quaternion(0, 0, 0) );
+    br.sendTransform(tf::StampedTransform(transform, ros::Time::now(), "frameMapa", "base_link"));
+
+    cloud->header.frame_id="frameMapa";
+    pub.publish (*cloud);
+
+    /*Visualizar*/
+    pcl::visualization::PointCloudColorHandlerRGBField<pcl::PointXYZRGB> rgb(p);   //esto es el manejador de color de la nube "cloud"
+
+    if (!viewer->updatePointCloud (p,rgb, "cloud")) //intento actualizar la nube y si no existe la creo.
+      viewer->addPointCloud(p,rgb,"cloud");
+
+    while (!viewer->wasStopped())
+    {
+      viewer->spinOnce (100);
+      boost::this_thread::sleep (boost::posix_time::microseconds (10));
+    }
+  }
+
+  pcl::PointCloud<pcl::PointXYZRGB>::Ptr getCloudfromColorAndDepth(const cv::Mat imageColor, const float* depthImage)
+  {
     pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud(new pcl::PointCloud <pcl::PointXYZRGB>);
     cloud->height = 480;
     cloud->width = 640;
@@ -50,187 +133,39 @@ pcl::PointCloud<pcl::PointXYZRGB>::Ptr getCloudfromColorAndDepth(const cv::Mat i
     int i,j;
     for (int v = -centerY,j=0; v < centerY; ++v,++j)
     {
-        for (register int u = -centerX,i=0; u < centerX; ++u, ++depth_idx,++i)
-        {
-          pcl::PointXYZRGB& pt = cloud->points[depth_idx];
+      for (register int u = -centerX,i=0; u < centerX; ++u, ++depth_idx,++i)
+      {
+        pcl::PointXYZRGB& pt = cloud->points[depth_idx];
 
         float depthimagevalue=depthImage[depth_idx];
 
         if (depthimagevalue == 0)
         {
-        // not valid
-        pt.x = pt.y = pt.z = bad_point;
-        continue;
-          }
+          // not valid
+          pt.x = pt.y = pt.z = bad_point;
+          continue;
+        }
         pt.z = depthimagevalue;
-          pt.x = u * pt.z * constant;
-          pt.y = v * pt.z * constant;
+        pt.x = u * pt.z * constant;
+        pt.y = v * pt.z * constant;
 
         const Point3_<uchar>* p = imageColor.ptr<Point3_<uchar> >(j,i);
         pt.r=p->z;
         pt.g=p->y;
         pt.b=p->x;
-        }
       }
+    }
     return cloud;
-}
-
-void processRegistration(){
-  	ros::NodeHandle nh;
-	pcl::PointCloud<pcl::PointXYZRGB>::Ptr p = getCloudfromColorAndDepth(imageColormsg->image, depthImageFloat);
-	ros::Publisher pub = nh.advertise<PointCloud> ("reconstruction", 1);
-	pcl::PointCloud<pcl::PointXYZ>::Ptr cloud(new pcl::PointCloud <pcl::PointXYZ>);
-
-	static tf::TransformBroadcaster br;
-  	tf::Transform transform;
-  	transform.setOrigin( tf::Vector3(0, 0, 0.0) );
-  	transform.setRotation( tf::Quaternion(0, 0, 0) );
-  	br.sendTransform(tf::StampedTransform(transform, ros::Time::now(), "frameMapa", "base_link"));
-
-	cloud->header.frame_id="frameMapa";
-	pub.publish (*cloud);
-
-  pcl::visualization::PCLVisualizer::Ptr viewer;//objeto viewer
-  viewer= pcl::visualization::PCLVisualizer::Ptr(new pcl::visualization::PCLVisualizer ("3D Viewer"));
-
-  viewer->setBackgroundColor (0, 0, 0);
-
-  //viewer->addCoordinateSystem (1.0); //podriamos dibujar un sistema de coordenadas si quisieramos
-
-  viewer->initCameraParameters ();
-  pcl::visualization::PointCloudColorHandlerRGBField<pcl::PointXYZRGB> rgb(p);   //esto es el manejador de color de la nube "cloud"
-
-  if (!viewer->updatePointCloud (p,rgb, "cloud")) //intento actualizar la nube y si no existe la creo.
-    viewer->addPointCloud(p,rgb,"cloud");
-
-  while (!viewer->wasStopped())
-  {
-    viewer->spinOnce (100);
-    boost::this_thread::sleep (boost::posix_time::microseconds (10));
   }
-}
 
-void imageCbdepth(const sensor_msgs::ImageConstPtr& msg)
-{
-    std::cerr<<" depthcb: "<<msg->header.frame_id<<" : "<<msg->header.seq<<" : "<<msg->header.stamp<<std::endl;
-    depthImageFloat = reinterpret_cast<const float*>(&msg->data[0]);
-    depthreceived=true;
-    if(imagereceived && depthreceived)
-   		processRegistration();
-
-}
+};
 
 
-void imageCb(const sensor_msgs::ImageConstPtr& msg)
-  {
-	try
-	{
-  		imageColormsg = cv_bridge::toCvCopy(msg, enc::BGR8);
-	}
-	catch (cv_bridge::Exception& e)
-	{
-  		ROS_ERROR("cv_bridge exception: %s", e.what());
-  		return;
-	}
-
-    std::cerr<<" imagecb: "<<msg->header.frame_id<<" : "<<msg->header.seq<<" : "<<msg->header.stamp<<std::endl;
-    imagereceived=true;
-
-    if(imagereceived && depthreceived)
-        processRegistration();
-}
-
-
-void callback(const PointCloud::ConstPtr& msg)
-{
-  printf ("Cloud: width = %d, height = %d\n", msg->width, msg->height);
-
-  BOOST_FOREACH (const pcl::PointXYZ& pt, msg->points)
-    printf ("\t(%f, %f, %f)\n", pt.x, pt.y, pt.z);
-}
-
-/*void detectKeypoints (const PointCloud::Ptr pcl_cloud, float min_scale, int nr_octaves, int nr_scales_per_octave)
-{
-	pcl::SIFTKeypoint<PointT, pcl::PointWithScale> sift_detect;
-	sift_detect.setSearchMethod(pcl::KdTreeFLANN<PointT>::Ptr (new pcl::KdTreeFLANN<PointT>));
-	sift_detect.setScales (min_scale, nr_octaves, nr_scales_per_octave); 
-	sift_detect.setMinimumContrast (min_contrast); 
-	sift_detect.setInputCloud (points);
-	pcl::PointCloud<pcl::PointWithScale> keypoints_temp;
-	sift_detect.compute (keypoints_temp);
-	PointCloudPtr keypoints (new PointCloud); 
-	pcl::copyPointCloud (keypoints_temp, *keypoints);
-	//return (keypoints); 
-
-	//ESTO PETAAAAAA
-	PointCloud::Ptr sift_cloud (new PointCloud);
-	printf("Creating KD-tree\n");
-  	// Create a KD-Tree (for the search method of sift object)
-	pcl::search::KdTree<PointT>::Ptr tree (new pcl::search::KdTree<PointT>);
-	printf("a\n");
-	tree->setInputCloud (pcl_cloud);
-
-  	pcl::SIFTKeypoint<PointT, PointT> sift_object;
-
-  	printf("Setting input cloud\n");
-  	sift_object.setInputCloud(pcl_cloud);
-
-  	printf("Setting search method\n");
-  	sift_object.setSearchMethod(tree);
-
-  	printf("Setting octaves\n");
-  	sift_object.setScales(0.5, 8, 5); //random initialization
-
-  	printf("computing sift features\n");
-  	sift_object.compute(*sift_cloud);
-
-  	printf("we found %d SIFT features in the cloud\n", sift_cloud->height*sift_cloud->width);
-}*/
-
-
-
-
-int main(int argc, char** argv){
-  ros::init(argc, argv, "sub_pcl");
+int main(int argc, char **argv) {
+  ros::init(argc, argv, "prac2"); // Inicializa un nuevo nodo llamado wander
   ros::NodeHandle nh;
-  ros::Subscriber sub2 = nh.subscribe("/camera/rgb/image_color", 1, imageCb);
-  ros::Subscriber sub = nh.subscribe("/camera/depth/image", 1, imageCbdepth);
-  ros::spin();
-}
+  Prac2 prac2(nh); // Crea un objeto de esta clase y lo asocia con roscore
+  prac2.bucle(); // Ejecuta el bucle
+  return 0;
+};
 
-int publicar(int argc, char** argv)
-{
-  ros::init (argc, argv, "pub_pcl");
-  ros::NodeHandle nh;
-  ros::Publisher pub = nh.advertise<PointCloud> ("reconstruction", 1);	
-  pcl::PointCloud<pcl::PointXYZ>::Ptr cloud(new pcl::PointCloud <pcl::PointXYZ>);
-  
-  //para hacer no se qué del rviz
-  static tf::TransformBroadcaster br;
-  tf::Transform transform;
-  transform.setOrigin( tf::Vector3(0, 0, 0.0) );
-  transform.setRotation( tf::Quaternion(0, 0, 0) );
-  br.sendTransform(tf::StampedTransform(transform, ros::Time::now(), "frameMapa", "base_link"));
-
-  //publicar
-  cloud->header.frame_id="frameMapa";
-  pub.publish (*cloud);
-
-//http://www.pointclouds.org/assets/iros2011/features.pdf 
-
-  /*ros::Publisher pub = nh.advertise<PointCloud> ("points2", 1);
-
-  PointCloud::Ptr msg (new PointCloud);
-  msg->header.frame_id = "some_tf_frame";
-  msg->height = msg->width = 1;
-  msg->points.push_back (pcl::PointXYZ(1.0, 2.0, 3.0));
-
-  ros::Rate loop_rate(4);
-  while (nh.ok())
-  {
-    msg->header.stamp = ros::Time::now ();
-    pub.publish (msg);
-    ros::spinOnce ();
-    loop_rate.sleep ();
-  }*/
-}
