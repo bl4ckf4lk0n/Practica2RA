@@ -136,6 +136,9 @@ class Prac2 {
 
   void processRegistration(){
 
+    HAY QUE QUITAR NARF Y UTILIZAR SIFT. Hay que separarlo por funciones y probar que funciona
+    Igualmente da un error de compilacion porque esta deprecated la funcion en la que da
+
    //   ros::NodeHandle nh;
     
     
