@@ -111,9 +111,8 @@ class Prac2 {
     }
 
      pcl::PointCloud<pcl::PointXYZRGB>::Ptr reducirNube(pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud){
-        std::vector<int> indices1;
-        cloud->is_dense = false;
-        pcl::removeNaNFromPointCloud<pcl::PointXYZRGB>(*cloud, *cloud, indices1);
+        std::cerr<<"Reduciendo nube"<<std::endl;
+        
 
         pcl::PointCloud<pcl::PointXYZRGB>::Ptr ds_src (new pcl::PointCloud<pcl::PointXYZRGB>);
         pcl::VoxelGrid<pcl::PointXYZRGB> grid; 
@@ -136,15 +135,16 @@ class Prac2 {
         PCL_INFO (" Normal Estimation - Source \n");    
         ne.setInputCloud (ds_src); 
         ne.setSearchSurface (cloud); 
-        ne.setSearchMethod (tree_src); 
-        ne.setRadiusSearch (0.05); 
+        ne.setSearchMethod (tree_src);
+        ne.setRadiusSearch (0.01);
         ne.compute (*norm_src);
 
         return norm_src; 
     }
 
     pcl::PointCloud<pcl::PointXYZRGB>::Ptr extractSiftKeypoints(pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud){
-        float min_scale = 0.0005; 
+        std::cerr<<"extracting keypoints"<<std::endl;
+        float min_scale = 0.005; 
         int nr_octaves = 4; 
         int nr_scales_per_octave = 5; 
         float min_contrast = 1; 
@@ -178,9 +178,11 @@ class Prac2 {
     pcl::PointCloud<pcl::PFHSignature125>::Ptr createDescriptor(pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud, pcl::PointCloud<pcl::Normal>::Ptr norm_src, pcl::PointCloud<pcl::PointXYZRGB>::Ptr keypoints_src){
          PCL_INFO ("PFH - started\n"); 
          pcl::PFHEstimation<pcl::PointXYZRGB, pcl::Normal, pcl::PFHSignature125> pfh_est_src; 
-         pcl::search::KdTree<pcl::PointXYZRGB>::Ptr tree_pfh_src (new pcl::search::KdTree<pcl::PointXYZRGB>()); 
+         pcl::search::KdTree<pcl::PointXYZRGB>::Ptr tree_pfh_src (new pcl::search::KdTree<pcl::PointXYZRGB>());
+         std::cerr<<cloud->size()<<std::endl;
+         std::cerr<<norm_src->size()<<std::endl;
          pfh_est_src.setSearchMethod (tree_pfh_src); 
-         pfh_est_src.setRadiusSearch (0.1); 
+         pfh_est_src.setRadiusSearch (0.01); 
          pfh_est_src.setSearchSurface (cloud);   
          pfh_est_src.setInputNormals (norm_src); 
          pfh_est_src.setInputCloud (keypoints_src); 
@@ -234,6 +236,12 @@ class Prac2 {
 
         //visualizar(cloud_src, cloud_tgt);
 
+        std::vector<int> indices1, indices2;
+        cloud_src->is_dense = false;
+        cloud_tgt->is_dense = false;
+        pcl::removeNaNFromPointCloud<pcl::PointXYZRGB>(*cloud_src, *cloud_src, indices1);
+        pcl::removeNaNFromPointCloud<pcl::PointXYZRGB>(*cloud_tgt, *cloud_tgt, indices2);
+
         pcl::PointCloud<pcl::PointXYZRGB>::Ptr nube_src = reducirNube(cloud_src);
         pcl::PointCloud<pcl::PointXYZRGB>::Ptr nube_tgt = reducirNube(cloud_tgt);
 
@@ -244,15 +252,16 @@ class Prac2 {
         pcl::PointCloud<pcl::PointXYZRGB>::Ptr keypoints_src = extractSiftKeypoints(cloud_src);
         pcl::PointCloud<pcl::PointXYZRGB>::Ptr keypoints_tgt = extractSiftKeypoints(cloud_tgt);
 
-        pcl::PointCloud<pcl::PFHSignature125>::Ptr descriptor_src = createDescriptor(cloud_src, normal_src, keypoints_src);
-        pcl::PointCloud<pcl::PFHSignature125>::Ptr descriptor_tgt = createDescriptor(cloud_tgt, normal_tgt, keypoints_tgt);
+        pcl::PointCloud<pcl::PFHSignature125>::Ptr descriptor_src = createDescriptor(nube_src, normal_src, keypoints_src);
+        pcl::PointCloud<pcl::PFHSignature125>::Ptr descriptor_tgt = createDescriptor(nube_tgt, normal_tgt, keypoints_tgt);
 
         /*Correspondencias */
-        
+        PCL_INFO ("Correspondence Estimation\n"); 
         pcl::registration::CorrespondenceEstimation<pcl::PFHSignature125, pcl::PFHSignature125> corEst; 
-        corEst.setInputCloud (descriptor_src); 
-        corEst.setInputTarget (descriptor_tgt); 
-        boost::shared_ptr<pcl::Correspondences> cor_all_ptr (new pcl::Correspondences); 
+        corEst.setInputSource(descriptor_src); 
+        corEst.setInputTarget(descriptor_tgt); 
+        boost::shared_ptr<pcl::Correspondences> cor_all_ptr (new pcl::Correspondences);
+        //peta aqui
         corEst.determineCorrespondences (*cor_all_ptr);
         Eigen::Matrix4f transformation; 
         PCL_INFO ("Correspondence Rejection Features\n"); 
@@ -262,10 +271,10 @@ class Prac2 {
         //pcl::SampleConsensusModelPlane<pcl::PointXYZRGB>::Ptr model_p (new pcl::SampleConsensusModelPlane<pcl::PointXYZRGB> (cloud_src));
         //pcl::RandomSampleConsensus<pcl::PointXYZRGB> sac (model_p); 
         pcl::registration::CorrespondenceRejectorSampleConsensus<pcl::PointXYZRGB> sac;
-        sac.setInputCloud (cloud_src); 
-        sac.setTargetCloud (cloud_tgt); 
+        sac.setInputSource (cloud_src); 
+        sac.setInputTarget(cloud_tgt); 
         sac.setInlierThreshold (epsilon_sac); 
-        sac.setMaxIterations (iter_sac); 
+        sac.setMaximumIterations (iter_sac); 
         sac.setInputCorrespondences (cor_all_ptr); 
 
         boost::shared_ptr<pcl::Correspondences> cor_inliers_ptr (new pcl::Correspondences); 
@@ -657,7 +666,6 @@ class Prac2 {
      }
 
      if(imagereceived && depthreceived){
-        std::cerr<<"hola";
          if(cloud_src->empty())
           cloud_src = getCloudfromColorAndDepth(imageColormsg->image, depthImageFloat);
         else if(cloud_tgt->empty()){
