@@ -136,7 +136,7 @@ class Prac2 {
         ne.setInputCloud (ds_src); 
         ne.setSearchSurface (cloud); 
         ne.setSearchMethod (tree_src);
-        ne.setRadiusSearch (0.01);
+        ne.setRadiusSearch (0.02);
         ne.compute (*norm_src);
 
         return norm_src; 
@@ -182,7 +182,7 @@ class Prac2 {
          std::cerr<<cloud->size()<<std::endl;
          std::cerr<<norm_src->size()<<std::endl;
          pfh_est_src.setSearchMethod (tree_pfh_src); 
-         pfh_est_src.setRadiusSearch (0.01); 
+         pfh_est_src.setRadiusSearch (0.1); 
          pfh_est_src.setSearchSurface (cloud);   
          pfh_est_src.setInputNormals (norm_src); 
          pfh_est_src.setInputCloud (keypoints_src); 
