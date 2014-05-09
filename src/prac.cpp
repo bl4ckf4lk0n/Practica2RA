@@ -74,38 +74,57 @@ class Prac2 {
         }
     };
 
-    void visualizar(){
-
+    void visualizar(pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud1, pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud2){
         boost::shared_ptr<pcl::visualization::PCLVisualizer> MView (new pcl::visualization::PCLVisualizer ("Aligning")); 
-    MView->initCameraParameters (); 
-    //View-Port1 
-    int v1(0); 
-    MView->createViewPort (0.0, 0.0, 0.5, 1.0, v1); 
-    MView->setBackgroundColor (0, 0, 0, v1); 
-    MView->addText ("Start:View-Port 1", 10, 10, "v1_text", v1); 
-                        //PointCloud Farben...verschieben vor v1? 
-    pcl::visualization::PointCloudColorHandlerCustom<pcl::PointXYZRGB> green (cloud_src, 0,255,0); 
-    pcl::visualization::PointCloudColorHandlerCustom<pcl::PointXYZRGB> red (cloud_tgt, 255,0,0); 
+        MView->initCameraParameters(); 
+        //View-Port1 
+        int v1(0); 
+        MView->createViewPort (0.0, 0.0, 0.5, 1.0, v1); 
+        MView->setBackgroundColor (0, 0, 0, v1); 
+        MView->addText ("Start:View-Port 1", 10, 10, "v1_text", v1); 
+                            //PointCloud Farben...verschieben vor v1? 
+        pcl::visualization::PointCloudColorHandlerCustom<pcl::PointXYZRGB> green (cloud1, 0,255,0); 
+        pcl::visualization::PointCloudColorHandlerCustom<pcl::PointXYZRGB> red (cloud2, 255,0,0); 
 
-    MView->addPointCloud (cloud_src, green, "source", v1); 
-    MView->addPointCloud (cloud_tgt, red, "target", v1); 
-                        //View-Port2 
-    int v2(0); 
-    MView->createViewPort (0.5, 0.0, 1.0, 1.0, v2); 
-    MView->setBackgroundColor (0, 0, 0, v2); 
-    MView->addText ("Aligned:View-Port 2", 10, 10, "v2_text", v2); 
-    
-                        //MView->addPointCloud (cloud_tgt, red, "target2", v2); 
-                        //MView->addPointCloud (cloud_src, green, "source2", v2); 
-                //Properties for al viewports 
-    MView->setPointCloudRenderingProperties (pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 1, "source"); 
-    MView->setPointCloudRenderingProperties (pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 1, "target"); 
-                        //MView->setPointCloudRenderingProperties (pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 1, "target2");    
-    while (!MView->wasStopped())
+        MView->addPointCloud (cloud1, green, "source", v1); 
+        MView->addPointCloud (cloud2, red, "target", v1); 
+                            //View-Port2 
+        int v2(0); 
+        MView->createViewPort (0.5, 0.0, 1.0, 1.0, v2); 
+        MView->setBackgroundColor (0, 0, 0, v2); 
+        MView->addText ("Aligned:View-Port 2", 10, 10, "v2_text", v2); 
+        
+        //MView->addPointCloud (cloud2, red, "target2", v2); 
+        //MView->addPointCloud (cloud1, green, "source2", v2); 
+        //Properties for al viewports 
+        MView->setPointCloudRenderingProperties (pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 1, "source"); 
+        MView->setPointCloudRenderingProperties (pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 1, "target"); 
+                            //MView->setPointCloudRenderingProperties (pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 1, "target2");    
+        while (!MView->wasStopped())
         {
             MView->spinOnce (100);
             boost::this_thread::sleep (boost::posix_time::microseconds (10));
         }
+    }
+
+    void reducirNube(){
+        std::vector<int> indices1,indices2;
+        cloud_src->dense = false;
+        cloud_tgt->dense = false;
+        pcl::removeNaNFromPointCloud<pcl::PointXYZRGB>(*cloud_src, *cloud_src, indices1); 
+        pcl::removeNaNFromPointCloud<pcl::PointXYZRGB>(*cloud_tgt, *cloud_tgt, indices2); 
+
+        pcl::PointCloud<pcl::PointXYZRGB>::Ptr ds_src (new pcl::PointCloud<pcl::PointXYZRGB>); 
+        pcl::PointCloud<pcl::PointXYZRGB>::Ptr ds_tgt (new pcl::PointCloud<pcl::PointXYZRGB>); 
+        pcl::VoxelGrid<pcl::PointXYZRGB> grid; 
+        float voxel_side_size=0.02; //2cm
+        grid.setLeafSize (voxel_side_size, voxel_side_size, voxel_side_size);
+        grid.setInputCloud (cloud_src); 
+        grid.filter (*ds_src); 
+        grid.setInputCloud (cloud_tgt); 
+        grid.filter (*ds_tgt); 
+
+        visualizar(ds_src, ds_tgt);
     }
 
     void processRegistration()
@@ -124,7 +143,9 @@ class Prac2 {
             boost::this_thread::sleep (boost::posix_time::microseconds (10));
         //}
 
-        visualizar();
+        //visualizar(cloud_src, cloud_tgt);
+
+        reducirNube();
     }
 
 /*void processRegistration2(){
