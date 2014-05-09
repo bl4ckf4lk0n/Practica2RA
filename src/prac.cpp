@@ -45,9 +45,9 @@ const float* depthImageFloat1;
 cv_bridge::CvImagePtr imageColormsg1;
 bool depthreceived1;
 bool imagereceived1;
-pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_src (new pcl::PointCloud<pcl::PointXYZ>); 
-pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_tgt (new pcl::PointCloud<pcl::PointXYZ>); 
-pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_tmp (new pcl::PointCloud<pcl::PointXYZ>); 
+pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud_src (new pcl::PointCloud<pcl::PointXYZRGB>); 
+pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud_tgt (new pcl::PointCloud<pcl::PointXYZRGB>); 
+pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud_tmp (new pcl::PointCloud<pcl::PointXYZRGB>); 
 
 
 
@@ -74,61 +74,63 @@ class Prac2 {
         }
     };
 
-void processRegistration()
-{
-    ros::NodeHandle nh;
-    pcl::PointCloud<pcl::PointXYZRGB>::Ptr p = getCloudfromColorAndDepth(imageColormsg->image, depthImageFloat);
-    ros::Publisher pub = nh.advertise<PointCloud> ("reconstruction", 1);
-    pcl::PointCloud<pcl::PointXYZ>::Ptr cloud(new pcl::PointCloud <pcl::PointXYZ>);
+    void processRegistration()
+    {
+        std::cerr<<"registro"<<std::endl;
+        ros::NodeHandle nh;
+        pcl::PointCloud<pcl::PointXYZRGB>::Ptr p = getCloudfromColorAndDepth(imageColormsg->image, depthImageFloat);
+        ros::Publisher pub = nh.advertise<PointCloud> ("reconstruction", 1);
+        pcl::PointCloud<pcl::PointXYZ>::Ptr cloud(new pcl::PointCloud <pcl::PointXYZ>);
 
-    static tf::TransformBroadcaster br;
-    tf::Transform transform;
-    transform.setOrigin( tf::Vector3(0, 0, 0.0) );
-    transform.setRotation( tf::Quaternion(0, 0, 0) );
-    br.sendTransform(tf::StampedTransform(transform, ros::Time::now(), "frameMapa", "base_link"));
+        static tf::TransformBroadcaster br;
+        tf::Transform transform;
+        transform.setOrigin( tf::Vector3(0, 0, 0.0) );
+        transform.setRotation( tf::Quaternion(0, 0, 0) );
+        br.sendTransform(tf::StampedTransform(transform, ros::Time::now(), "frameMapa", "base_link"));
 
-    cloud->header.frame_id="frameMapa";
-    pub.publish (*cloud);
+        cloud->header.frame_id="frameMapa";
+        pub.publish (*cloud);
 
-    /*Visualizar*/
-    pcl::visualization::PointCloudColorHandlerRGBField<pcl::PointXYZRGB> rgb(p);   //esto es el manejador de color de la nube "cloud"
-
-    if (!viewer->updatePointCloud (p,rgb, "cloud")) //intento actualizar la nube y si no existe la creo.
-        viewer->addPointCloud(p,rgb,"cloud");
-
-    
-
-    boost::shared_ptr<pcl::visualization::PCLVisualizer> MView (new pcl::visualization::PCLVisualizer ("Aligning")); 
+        boost::shared_ptr<pcl::visualization::PCLVisualizer> MView (new pcl::visualization::PCLVisualizer ("Aligning")); 
     MView->initCameraParameters (); 
-        //View-Port1 
+    //View-Port1 
     int v1(0); 
     MView->createViewPort (0.0, 0.0, 0.5, 1.0, v1); 
     MView->setBackgroundColor (0, 0, 0, v1); 
     MView->addText ("Start:View-Port 1", 10, 10, "v1_text", v1); 
-                            //PointCloud Farben...verschieben vor v1? 
-    pcl::visualization::PointCloudColorHandlerCustom<pcl::PointXYZ> green (cloud_src, 0,255,0); 
-    pcl::visualization::PointCloudColorHandlerCustom<pcl::PointXYZ> red (cloud_tgt, 255,0,0); 
+                        //PointCloud Farben...verschieben vor v1? 
+    pcl::visualization::PointCloudColorHandlerCustom<pcl::PointXYZRGB> green (cloud_src, 0,255,0); 
+    pcl::visualization::PointCloudColorHandlerCustom<pcl::PointXYZRGB> red (cloud_tgt, 255,0,0); 
 
     MView->addPointCloud (cloud_src, green, "source", v1); 
     MView->addPointCloud (cloud_tgt, red, "target", v1); 
-                            //View-Port2 
+                        //View-Port2 
     int v2(0); 
     MView->createViewPort (0.5, 0.0, 1.0, 1.0, v2); 
     MView->setBackgroundColor (0, 0, 0, v2); 
     MView->addText ("Aligned:View-Port 2", 10, 10, "v2_text", v2); 
-
-                            //MView->addPointCloud (cloud_tgt, red, "target2", v2); 
-                            //MView->addPointCloud (cloud_src, green, "source2", v2); 
-                    //Properties for al viewports 
+    
+                        //MView->addPointCloud (cloud_tgt, red, "target2", v2); 
+                        //MView->addPointCloud (cloud_src, green, "source2", v2); 
+                //Properties for al viewports 
     MView->setPointCloudRenderingProperties (pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 1, "source"); 
     MView->setPointCloudRenderingProperties (pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 1, "target"); 
+                        //MView->setPointCloudRenderingProperties (pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 1, "target2");    
+    
 
-    while (!viewer->wasStopped())
-    {
-        viewer->spinOnce (100);
-        boost::this_thread::sleep (boost::posix_time::microseconds (10));
+        /*Visualizar*/
+        pcl::visualization::PointCloudColorHandlerRGBField<pcl::PointXYZRGB> rgb(p);   //esto es el manejador de color de la nube "cloud"
+
+        if (!viewer->updatePointCloud (p,rgb, "cloud")) //intento actualizar la nube y si no existe la creo.
+            viewer->addPointCloud(p,rgb,"cloud");
+
+
+        while (!viewer->wasStopped())
+        {
+            viewer->spinOnce (100);
+            boost::this_thread::sleep (boost::posix_time::microseconds (10));
+        }
     }
-}
 
 /*void processRegistration2(){
 
@@ -483,7 +485,8 @@ void processRegistration()
       void imageCbdepth(const sensor_msgs::ImageConstPtr& msg)
       {
         std::cerr<<" depthcb: "<<msg->header.frame_id<<" : "<<msg->header.seq<<" : "<<msg->header.stamp<<std::endl;
-        if(cloud_src==NULL){
+        std::cerr<<cloud_src->size()<< " " <<cloud_src->empty()<<std::endl;
+        if(cloud_src->empty()){
          depthImageFloat = reinterpret_cast<const float*>(&msg->data[0]);
          depthreceived=true;
      } else{
@@ -491,51 +494,54 @@ void processRegistration()
          depthreceived1=true;
      }
 
-     depthreceived=true;
-     if(imagereceived && depthreceived)
-         if(cloud_src==NULL)
-          pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud_src = getCloudfromColorAndDepth(imageColormsg->image, depthImageFloat);
-      else if(cloud_tgt == NULL){
-         if(imagereceived1 && depthreceived1)
-          pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud_tgt = getCloudfromColorAndDepth(imageColormsg1->image, depthImageFloat1);
-  } else {
-     processRegistration();
- }
-
-}
-
-
-void imageCb(const sensor_msgs::ImageConstPtr& msg)
-{
-	try
-	{
-		if(cloud_src==NULL){
-         imageColormsg = cv_bridge::toCvCopy(msg, enc::BGR8);
-         imagereceived=true;
-     }
-     else{
-         imageColormsg1 = cv_bridge::toCvCopy(msg, enc::BGR8);
-         imagereceived1=true;
-     }
- }
- catch (cv_bridge::Exception& e)
- {
-    ROS_ERROR("cv_bridge exception: %s", e.what());
-    return;
-}
-
-std::cerr<<" imagecb: "<<msg->header.frame_id<<" : "<<msg->header.seq<<" : "<<msg->header.stamp<<std::endl;
+     if(imagereceived && depthreceived){
+        std::cerr<<"hola";
+         if(cloud_src->empty())
+          cloud_src = getCloudfromColorAndDepth(imageColormsg->image, depthImageFloat);
+        else if(cloud_tgt->empty()){
+            if(imagereceived1 && depthreceived1)
+                cloud_tgt = getCloudfromColorAndDepth(imageColormsg1->image, depthImageFloat1);
+        } else {
+            processRegistration();
+        }
+    }
+    }
 
 
-if(imagereceived && depthreceived)
- if(cloud_src==NULL)
-  pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud_src = getCloudfromColorAndDepth(imageColormsg->image, depthImageFloat);
-else if(cloud_tgt == NULL){
- pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud_tgt = getCloudfromColorAndDepth(imageColormsg1->image, depthImageFloat1);
-} else {
- processRegistration();
-}
-}
+    void imageCb(const sensor_msgs::ImageConstPtr& msg)
+    {
+    	try
+    	{
+    		if(cloud_src->empty()){
+             imageColormsg = cv_bridge::toCvCopy(msg, enc::BGR8);
+             imagereceived=true;
+            }
+            else{
+                imageColormsg1 = cv_bridge::toCvCopy(msg, enc::BGR8);
+                 imagereceived1=true;
+             }
+        }
+         catch (cv_bridge::Exception& e)
+         {
+            ROS_ERROR("cv_bridge exception: %s", e.what());
+            return;
+        }
+
+        std::cerr<<" imagecb: "<<msg->header.frame_id<<" : "<<msg->header.seq<<" : "<<msg->header.stamp<<std::endl;
+
+
+        if(imagereceived && depthreceived){
+
+        std::cerr<<"hola";
+         if(cloud_src->empty())
+          cloud_src = getCloudfromColorAndDepth(imageColormsg->image, depthImageFloat);
+        else if(cloud_tgt->empty()){
+         cloud_tgt = getCloudfromColorAndDepth(imageColormsg1->image, depthImageFloat1);
+        } else {
+         processRegistration();
+        }
+        }
+    }
 
 
 void callback(const PointCloud::ConstPtr& msg)
@@ -583,7 +589,6 @@ void callback(const PointCloud::ConstPtr& msg)
 
   	printf("we found %d SIFT features in the cloud\n", sift_cloud->height*sift_cloud->width);
 }*/
-
 
 };
 
