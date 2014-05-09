@@ -74,22 +74,7 @@ class Prac2 {
         }
     };
 
-    void processRegistration()
-    {
-        std::cerr<<"registro"<<std::endl;
-        ros::NodeHandle nh;
-        pcl::PointCloud<pcl::PointXYZRGB>::Ptr p = getCloudfromColorAndDepth(imageColormsg->image, depthImageFloat);
-        ros::Publisher pub = nh.advertise<PointCloud> ("reconstruction", 1);
-        pcl::PointCloud<pcl::PointXYZ>::Ptr cloud(new pcl::PointCloud <pcl::PointXYZ>);
-
-        static tf::TransformBroadcaster br;
-        tf::Transform transform;
-        transform.setOrigin( tf::Vector3(0, 0, 0.0) );
-        transform.setRotation( tf::Quaternion(0, 0, 0) );
-        br.sendTransform(tf::StampedTransform(transform, ros::Time::now(), "frameMapa", "base_link"));
-
-        cloud->header.frame_id="frameMapa";
-        pub.publish (*cloud);
+    void visualizar(){
 
         boost::shared_ptr<pcl::visualization::PCLVisualizer> MView (new pcl::visualization::PCLVisualizer ("Aligning")); 
     MView->initCameraParameters (); 
@@ -116,20 +101,30 @@ class Prac2 {
     MView->setPointCloudRenderingProperties (pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 1, "source"); 
     MView->setPointCloudRenderingProperties (pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 1, "target"); 
                         //MView->setPointCloudRenderingProperties (pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 1, "target2");    
-    
-
-        /*Visualizar*/
-        pcl::visualization::PointCloudColorHandlerRGBField<pcl::PointXYZRGB> rgb(p);   //esto es el manejador de color de la nube "cloud"
-
-        if (!viewer->updatePointCloud (p,rgb, "cloud")) //intento actualizar la nube y si no existe la creo.
-            viewer->addPointCloud(p,rgb,"cloud");
-
-
-        while (!viewer->wasStopped())
+    while (!MView->wasStopped())
         {
-            viewer->spinOnce (100);
+            MView->spinOnce (100);
             boost::this_thread::sleep (boost::posix_time::microseconds (10));
         }
+    }
+
+    void processRegistration()
+    {
+        ros::NodeHandle nh;
+        /*Visualizar*/
+        pcl::visualization::PointCloudColorHandlerRGBField<pcl::PointXYZRGB> rgb(cloud_src);   //esto es el manejador de color de la nube "cloud"
+
+        if (!viewer->updatePointCloud (cloud_src,rgb, "cloud")) //intento actualizar la nube y si no existe la creo.
+            viewer->addPointCloud(cloud_src,rgb,"cloud");
+
+
+        //while (!viewer->wasStopped())
+        //{
+            viewer->spinOnce (100);
+            boost::this_thread::sleep (boost::posix_time::microseconds (10));
+        //}
+
+        visualizar();
     }
 
 /*void processRegistration2(){
@@ -532,11 +527,11 @@ class Prac2 {
 
         if(imagereceived && depthreceived){
 
-        std::cerr<<"hola";
          if(cloud_src->empty())
           cloud_src = getCloudfromColorAndDepth(imageColormsg->image, depthImageFloat);
         else if(cloud_tgt->empty()){
-         cloud_tgt = getCloudfromColorAndDepth(imageColormsg1->image, depthImageFloat1);
+            if(imagereceived1 && depthreceived1)
+                cloud_tgt = getCloudfromColorAndDepth(imageColormsg1->image, depthImageFloat1);
         } else {
          processRegistration();
         }
