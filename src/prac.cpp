@@ -52,61 +52,30 @@ pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_tmp (new pcl::PointCloud<pcl::PointXYZ
 
 
 class Prac2 {
-  ros::Subscriber imgSub;
-  ros::Subscriber depthSub;
-  pcl::visualization::PCLVisualizer::Ptr viewer;//objeto viewer
+    ros::Subscriber imgSub;
+    ros::Subscriber depthSub;
+    pcl::visualization::PCLVisualizer::Ptr viewer;//objeto viewer
 
-  public:Prac2(ros::NodeHandle& nh) { 
+    public:Prac2(ros::NodeHandle& nh) {
+        imgSub = nh.subscribe("/camera/rgb/image_color", 1, &Prac2::imageCb, this);
+        depthSub = nh.subscribe("/camera/depth/image", 1, &Prac2::imageCbdepth, this);
 
-    imgSub = nh.subscribe("/camera/rgb/image_color", 1, &Prac2::imageCb, this);
-    depthSub = nh.subscribe("/camera/depth/image", 1, &Prac2::imageCbdepth, this);
-
-    viewer= pcl::visualization::PCLVisualizer::Ptr(new pcl::visualization::PCLVisualizer ("3D Viewer"));
-    viewer->setBackgroundColor (0, 0, 0);
-    viewer->initCameraParameters ();
-  };
-
-
-  void bucle() {
-    ros::Rate rate(1); 
-    while (ros::ok()) {
-      ros::spinOnce(); // Se procesarán todas las llamadas pendientes, es decir, llamará a callBack
-      rate.sleep(); // Espera a que finalice el ciclo
-    }
-  };
-
-  void imageCbdepth(const sensor_msgs::ImageConstPtr& msg)
-  {
-    std::cerr<<" depthcb: "<<msg->header.frame_id<<" : "<<msg->header.seq<<" : "<<msg->header.stamp<<std::endl;
-    depthImageFloat = reinterpret_cast<const float*>(&msg->data[0]);
-    depthreceived=true;
-    if(imagereceived && depthreceived)
-    processRegistration();
-
-  }
+        viewer= pcl::visualization::PCLVisualizer::Ptr(new pcl::visualization::PCLVisualizer ("3D Viewer"));
+        viewer->setBackgroundColor (0, 0, 0);
+        viewer->initCameraParameters ();
+    };
 
 
-  void imageCb(const sensor_msgs::ImageConstPtr& msg)
-  {
-    try
-    {
-      imageColormsg = cv_bridge::toCvCopy(msg, enc::BGR8);
-    }
-    catch (cv_bridge::Exception& e)
-    {
-      ROS_ERROR("cv_bridge exception: %s", e.what());
-      return;
-    }
+    void bucle() {
+        ros::Rate rate(1); 
+        while (ros::ok()) {
+          ros::spinOnce(); // Se procesarán todas las llamadas pendientes, es decir, llamará a callBack
+          rate.sleep(); // Espera a que finalice el ciclo
+        }
+    };
 
-    std::cerr<<" imagecb: "<<msg->header.frame_id<<" : "<<msg->header.seq<<" : "<<msg->header.stamp<<std::endl;
-    imagereceived=true;
-
-    if(imagereceived && depthreceived)
-      processRegistration();
-  }
-
-  void processRegistration2()
-  {
+void processRegistration()
+{
     ros::NodeHandle nh;
     pcl::PointCloud<pcl::PointXYZRGB>::Ptr p = getCloudfromColorAndDepth(imageColormsg->image, depthImageFloat);
     ros::Publisher pub = nh.advertise<PointCloud> ("reconstruction", 1);
@@ -125,19 +94,46 @@ class Prac2 {
     pcl::visualization::PointCloudColorHandlerRGBField<pcl::PointXYZRGB> rgb(p);   //esto es el manejador de color de la nube "cloud"
 
     if (!viewer->updatePointCloud (p,rgb, "cloud")) //intento actualizar la nube y si no existe la creo.
-      viewer->addPointCloud(p,rgb,"cloud");
+        viewer->addPointCloud(p,rgb,"cloud");
+
+    
+
+    boost::shared_ptr<pcl::visualization::PCLVisualizer> MView (new pcl::visualization::PCLVisualizer ("Aligning")); 
+    MView->initCameraParameters (); 
+        //View-Port1 
+    int v1(0); 
+    MView->createViewPort (0.0, 0.0, 0.5, 1.0, v1); 
+    MView->setBackgroundColor (0, 0, 0, v1); 
+    MView->addText ("Start:View-Port 1", 10, 10, "v1_text", v1); 
+                            //PointCloud Farben...verschieben vor v1? 
+    pcl::visualization::PointCloudColorHandlerCustom<pcl::PointXYZ> green (cloud_src, 0,255,0); 
+    pcl::visualization::PointCloudColorHandlerCustom<pcl::PointXYZ> red (cloud_tgt, 255,0,0); 
+
+    MView->addPointCloud (cloud_src, green, "source", v1); 
+    MView->addPointCloud (cloud_tgt, red, "target", v1); 
+                            //View-Port2 
+    int v2(0); 
+    MView->createViewPort (0.5, 0.0, 1.0, 1.0, v2); 
+    MView->setBackgroundColor (0, 0, 0, v2); 
+    MView->addText ("Aligned:View-Port 2", 10, 10, "v2_text", v2); 
+
+                            //MView->addPointCloud (cloud_tgt, red, "target2", v2); 
+                            //MView->addPointCloud (cloud_src, green, "source2", v2); 
+                    //Properties for al viewports 
+    MView->setPointCloudRenderingProperties (pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 1, "source"); 
+    MView->setPointCloudRenderingProperties (pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 1, "target"); 
 
     while (!viewer->wasStopped())
     {
-      viewer->spinOnce (100);
-      boost::this_thread::sleep (boost::posix_time::microseconds (10));
+        viewer->spinOnce (100);
+        boost::this_thread::sleep (boost::posix_time::microseconds (10));
     }
-  }
+}
 
-  void processRegistration(){
+/*void processRegistration2(){
 
-    HAY QUE QUITAR NARF Y UTILIZAR SIFT. Hay que separarlo por funciones y probar que funciona
-    Igualmente da un error de compilacion porque esta deprecated la funcion en la que da
+    //HAY QUE QUITAR NARF Y UTILIZAR SIFT. Hay que separarlo por funciones y probar que funciona
+    //Igualmente da un error de compilacion porque esta deprecated la funcion en la que da
 
    //   ros::NodeHandle nh;
     
@@ -173,79 +169,79 @@ class Prac2 {
  //    boost::this_thread::sleep (boost::posix_time::microseconds (10));
  //  }
 
-  boost::shared_ptr<pcl::visualization::PCLVisualizer> MView (new pcl::visualization::PCLVisualizer ("Aligning")); 
-                MView->initCameraParameters (); 
-                //View-Port1 
-                        int v1(0); 
-                        MView->createViewPort (0.0, 0.0, 0.5, 1.0, v1); 
-                        MView->setBackgroundColor (0, 0, 0, v1); 
-                        MView->addText ("Start:View-Port 1", 10, 10, "v1_text", v1); 
+    boost::shared_ptr<pcl::visualization::PCLVisualizer> MView (new pcl::visualization::PCLVisualizer ("Aligning")); 
+    MView->initCameraParameters (); 
+    //View-Port1 
+    int v1(0); 
+    MView->createViewPort (0.0, 0.0, 0.5, 1.0, v1); 
+    MView->setBackgroundColor (0, 0, 0, v1); 
+    MView->addText ("Start:View-Port 1", 10, 10, "v1_text", v1); 
                         //PointCloud Farben...verschieben vor v1? 
-                        pcl::visualization::PointCloudColorHandlerCustom<pcl::PointXYZ> green (cloud_src, 0,255,0); 
-                        pcl::visualization::PointCloudColorHandlerCustom<pcl::PointXYZ> red (cloud_tgt, 255,0,0); 
+    pcl::visualization::PointCloudColorHandlerCustom<pcl::PointXYZ> green (cloud_src, 0,255,0); 
+    pcl::visualization::PointCloudColorHandlerCustom<pcl::PointXYZ> red (cloud_tgt, 255,0,0); 
 
-                        MView->addPointCloud (cloud_src, green, "source", v1); 
-                        MView->addPointCloud (cloud_tgt, red, "target", v1); 
+    MView->addPointCloud (cloud_src, green, "source", v1); 
+    MView->addPointCloud (cloud_tgt, red, "target", v1); 
                         //View-Port2 
-                        int v2(0); 
-                        MView->createViewPort (0.5, 0.0, 1.0, 1.0, v2); 
-                        MView->setBackgroundColor (0, 0, 0, v2); 
-                        MView->addText ("Aligned:View-Port 2", 10, 10, "v2_text", v2); 
-                        
+    int v2(0); 
+    MView->createViewPort (0.5, 0.0, 1.0, 1.0, v2); 
+    MView->setBackgroundColor (0, 0, 0, v2); 
+    MView->addText ("Aligned:View-Port 2", 10, 10, "v2_text", v2); 
+    
                         //MView->addPointCloud (cloud_tgt, red, "target2", v2); 
                         //MView->addPointCloud (cloud_src, green, "source2", v2); 
                 //Properties for al viewports 
-                        MView->setPointCloudRenderingProperties (pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 1, "source"); 
-                        MView->setPointCloudRenderingProperties (pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 1, "target"); 
+    MView->setPointCloudRenderingProperties (pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 1, "source"); 
+    MView->setPointCloudRenderingProperties (pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 1, "target"); 
                         //MView->setPointCloudRenderingProperties (pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 1, "target2");    
-                        
+    
         //remove NAN-Points 
-                std::vector<int> indices1,indices2; 
-                pcl::removeNaNFromPointCloud (*cloud_src, *cloud_src, indices1); 
-                pcl::removeNaNFromPointCloud (*cloud_tgt, *cloud_tgt, indices2); 
+    std::vector<int> indices1,indices2; 
+    pcl::removeNaNFromPointCloud (*cloud_src, *cloud_src, indices1); 
+    pcl::removeNaNFromPointCloud (*cloud_tgt, *cloud_tgt, indices2); 
         //Downsampling 
-                PCL_INFO ("Downsampling \n"); 
+    PCL_INFO ("Downsampling \n"); 
                 //temp clouds src & tgt 
-                pcl::PointCloud<pcl::PointXYZ>::Ptr ds_src (new pcl::PointCloud<pcl::PointXYZ>); 
-                pcl::PointCloud<pcl::PointXYZ>::Ptr ds_tgt (new pcl::PointCloud<pcl::PointXYZ>); 
-                pcl::VoxelGrid<pcl::PointXYZ> grid; 
-                grid.setLeafSize (0.05, 0.05, 0.05); 
-                grid.setInputCloud (cloud_src); 
-                grid.filter (*ds_src); 
-                grid.setInputCloud (cloud_tgt); 
-                grid.filter (*ds_tgt);  
-                PCL_INFO (" Downsampling finished \n"); 
+    pcl::PointCloud<pcl::PointXYZ>::Ptr ds_src (new pcl::PointCloud<pcl::PointXYZ>); 
+    pcl::PointCloud<pcl::PointXYZ>::Ptr ds_tgt (new pcl::PointCloud<pcl::PointXYZ>); 
+    pcl::VoxelGrid<pcl::PointXYZ> grid; 
+    grid.setLeafSize (0.05, 0.05, 0.05); 
+    grid.setInputCloud (cloud_src); 
+    grid.filter (*ds_src); 
+    grid.setInputCloud (cloud_tgt); 
+    grid.filter (*ds_tgt);  
+    PCL_INFO (" Downsampling finished \n"); 
 
         // Normal-Estimation 
-                PCL_INFO ("Normal Estimation \n"); 
-                pcl::PointCloud<pcl::Normal>::Ptr norm_src (new pcl::PointCloud<pcl::Normal>); 
-                pcl::PointCloud<pcl::Normal>::Ptr norm_tgt (new pcl::PointCloud<pcl::Normal>); 
-                        
-                pcl::search::KdTree<pcl::PointXYZ>::Ptr tree_src(new pcl::search::KdTree<pcl::PointXYZ>()); 
-                pcl::search::KdTree<pcl::PointXYZ>::Ptr tree_tgt(new pcl::search::KdTree<pcl::PointXYZ>()); 
-                
-                pcl::NormalEstimation<pcl::PointXYZ, pcl::Normal> ne; 
+    PCL_INFO ("Normal Estimation \n"); 
+    pcl::PointCloud<pcl::Normal>::Ptr norm_src (new pcl::PointCloud<pcl::Normal>); 
+    pcl::PointCloud<pcl::Normal>::Ptr norm_tgt (new pcl::PointCloud<pcl::Normal>); 
+    
+    pcl::search::KdTree<pcl::PointXYZ>::Ptr tree_src(new pcl::search::KdTree<pcl::PointXYZ>()); 
+    pcl::search::KdTree<pcl::PointXYZ>::Ptr tree_tgt(new pcl::search::KdTree<pcl::PointXYZ>()); 
+    
+    pcl::NormalEstimation<pcl::PointXYZ, pcl::Normal> ne; 
                 //Source-Cloud 
-                PCL_INFO (" Normal Estimation - Source \n");    
-                ne.setInputCloud (ds_src); 
-                ne.setSearchSurface (cloud_src); 
-                ne.setSearchMethod (tree_src); 
-                ne.setRadiusSearch (0.05); 
-                ne.compute (*norm_src); 
+    PCL_INFO (" Normal Estimation - Source \n");    
+    ne.setInputCloud (ds_src); 
+    ne.setSearchSurface (cloud_src); 
+    ne.setSearchMethod (tree_src); 
+    ne.setRadiusSearch (0.05); 
+    ne.compute (*norm_src); 
 
                 //Target-Cloud 
-                PCL_INFO (" Normal Estimation - Target \n"); 
-                ne.setInputCloud (ds_tgt); 
-                ne.setSearchSurface (cloud_tgt); 
-                ne.setSearchMethod (tree_tgt); 
-                ne.setRadiusSearch (0.05); 
-                ne.compute (*norm_tgt); 
+    PCL_INFO (" Normal Estimation - Target \n"); 
+    ne.setInputCloud (ds_tgt); 
+    ne.setSearchSurface (cloud_tgt); 
+    ne.setSearchMethod (tree_tgt); 
+    ne.setRadiusSearch (0.05); 
+    ne.compute (*norm_tgt); 
 
         // Keypoints _ NARF 
-                PCL_INFO ("NARF - Keypoint \n"); 
+    PCL_INFO ("NARF - Keypoint \n"); 
                 //Probleme mit boost daher erstmal ohne 
-                pcl::RangeImage range_src; 
-                pcl::RangeImage range_tgt; 
+    pcl::RangeImage range_src; 
+    pcl::RangeImage range_tgt; 
 
                 //Header-information for Range Image 
                 float angularResolution = (float) (  0.2f * (M_PI/180.0f));  //   0.5 degree in radians 
@@ -295,7 +291,7 @@ class Prac2 {
                 keypoints_src->height = 1; 
                 keypoints_src->is_dense = false; 
                 keypoints_src->points.resize (keypoints_src->width * keypoints_src->height);    
-                                
+                
                 keypoints_tgt->width = keypoints_ind_tgt.points.size(); 
                 keypoints_tgt->height = 1; 
                 keypoints_tgt->is_dense = false; 
@@ -306,23 +302,23 @@ class Prac2 {
                 //source XYZ-CLoud  
                 for (size_t i = 0; i < keypoints_ind_src.points.size(); i++) 
                 {   
-                        ind_count = keypoints_ind_src.points[i]; 
+                    ind_count = keypoints_ind_src.points[i]; 
                         //float x = range_src.points[ind_count].x; 
-                        
-                        keypoints_src->points[i].x = range_src.points[ind_count].x; 
-                        keypoints_src->points[i].y = range_src.points[ind_count].y; 
-                        keypoints_src->points[i].z = range_src.points[ind_count].z; 
+                    
+                    keypoints_src->points[i].x = range_src.points[ind_count].x; 
+                    keypoints_src->points[i].y = range_src.points[ind_count].y; 
+                    keypoints_src->points[i].z = range_src.points[ind_count].z; 
                 } 
 
                 //target XYZ-Cloud 
                 for (size_t i = 0; i < keypoints_ind_tgt.points.size(); i++) 
                 {   
-                        ind_count = keypoints_ind_tgt.points[i]; 
+                    ind_count = keypoints_ind_tgt.points[i]; 
                         //float x = range_src.points[ind_count].x; 
-                        
-                        keypoints_tgt->points[i].x = range_tgt.points[ind_count].x; 
-                        keypoints_tgt->points[i].y = range_tgt.points[ind_count].y; 
-                        keypoints_tgt->points[i].z = range_tgt.points[ind_count].z; 
+                    
+                    keypoints_tgt->points[i].x = range_tgt.points[ind_count].x; 
+                    keypoints_tgt->points[i].y = range_tgt.points[ind_count].y; 
+                    keypoints_tgt->points[i].z = range_tgt.points[ind_count].z; 
                 } 
 
                 
@@ -430,115 +426,115 @@ class Prac2 {
                 
         // Warten bis Viewer geschlossen wird 
                 while (!MView->wasStopped()) 
-                        { 
-                                MView->spinOnce(100); 
-                        } 
+                { 
+                    MView->spinOnce(100); 
+                } 
 
-                    }
+            }*/
 
-                        
+            
 
-  pcl::PointCloud<pcl::PointXYZRGB>::Ptr getCloudfromColorAndDepth(const cv::Mat imageColor, const float* depthImage)
-  {
-    pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud(new pcl::PointCloud <pcl::PointXYZRGB>);
-    cloud->height = 480;
-    cloud->width = 640;
-    cloud->is_dense = false;
+            pcl::PointCloud<pcl::PointXYZRGB>::Ptr getCloudfromColorAndDepth(const cv::Mat imageColor, const float* depthImage)
+            {
+                pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud(new pcl::PointCloud <pcl::PointXYZRGB>);
+                cloud->height = 480;
+                cloud->width = 640;
+                cloud->is_dense = false;
 
-    cloud->points.resize(cloud->height * cloud->width);
+                cloud->points.resize(cloud->height * cloud->width);
 
-    register float constant = 0.0019047619;
-    cloud->header.frame_id = "/openni_rgb_optical_frame";
+                register float constant = 0.0019047619;
+                cloud->header.frame_id = "/openni_rgb_optical_frame";
 
-    register int centerX = (cloud->width >> 1);
-    int centerY = (cloud->height >> 1);
+                register int centerX = (cloud->width >> 1);
+                int centerY = (cloud->height >> 1);
 
-    float bad_point = std::numeric_limits<float>::quiet_NaN();
+                float bad_point = std::numeric_limits<float>::quiet_NaN();
 
-    register int depth_idx = 0;
-    int i,j;
-    for (int v = -centerY,j=0; v < centerY; ++v,++j)
-    {
-      for (register int u = -centerX,i=0; u < centerX; ++u, ++depth_idx,++i)
-      {
-        pcl::PointXYZRGB& pt = cloud->points[depth_idx];
+                register int depth_idx = 0;
+                int i,j;
+                for (int v = -centerY,j=0; v < centerY; ++v,++j)
+                {
+                  for (register int u = -centerX,i=0; u < centerX; ++u, ++depth_idx,++i)
+                  {
+                    pcl::PointXYZRGB& pt = cloud->points[depth_idx];
 
-        float depthimagevalue=depthImage[depth_idx];
+                    float depthimagevalue=depthImage[depth_idx];
 
-        if (depthimagevalue == 0)
-        {
+                    if (depthimagevalue == 0)
+                    {
           // not valid
-          pt.x = pt.y = pt.z = bad_point;
-          continue;
-        }
-        pt.z = depthimagevalue;
-        pt.x = u * pt.z * constant;
-        pt.y = v * pt.z * constant;
+                      pt.x = pt.y = pt.z = bad_point;
+                      continue;
+                  }
+                  pt.z = depthimagevalue;
+                  pt.x = u * pt.z * constant;
+                  pt.y = v * pt.z * constant;
 
-        const Point3_<uchar>* p = imageColor.ptr<Point3_<uchar> >(j,i);
-        pt.r=p->z;
-        pt.g=p->y;
-        pt.b=p->x;
+                  const Point3_<uchar>* p = imageColor.ptr<Point3_<uchar> >(j,i);
+                  pt.r=p->z;
+                  pt.g=p->y;
+                  pt.b=p->x;
+              }
+          }
+          return cloud;
       }
-    }
-    return cloud;
-}
 
-void imageCbdepth(const sensor_msgs::ImageConstPtr& msg)
-{
-    std::cerr<<" depthcb: "<<msg->header.frame_id<<" : "<<msg->header.seq<<" : "<<msg->header.stamp<<std::endl;
-    if(cloud_src==NULL){
-    	depthImageFloat = reinterpret_cast<const float*>(&msg->data[0]);
-    	depthreceived=true;
-    } else{
-    	depthImageFloat1 = reinterpret_cast<const float*>(&msg->data[0]);
-    	depthreceived1=true;
-    }
-    	
-    	depthreceived=true;
-    if(imagereceived && depthreceived)
-   		if(cloud_src==NULL)
-    		pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud_src = getCloudfromColorAndDepth(imageColormsg->image, depthImageFloat);
-        else if(cloud_tgt == NULL){
-        	if(imagereceived1 && depthreceived1)
-        		pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud_tgt = getCloudfromColorAndDepth(imageColormsg1->image, depthImageFloat1);
-        } else {
-        	processRegistration();
-        }
+      void imageCbdepth(const sensor_msgs::ImageConstPtr& msg)
+      {
+        std::cerr<<" depthcb: "<<msg->header.frame_id<<" : "<<msg->header.seq<<" : "<<msg->header.stamp<<std::endl;
+        if(cloud_src==NULL){
+         depthImageFloat = reinterpret_cast<const float*>(&msg->data[0]);
+         depthreceived=true;
+     } else{
+         depthImageFloat1 = reinterpret_cast<const float*>(&msg->data[0]);
+         depthreceived1=true;
+     }
+
+     depthreceived=true;
+     if(imagereceived && depthreceived)
+         if(cloud_src==NULL)
+          pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud_src = getCloudfromColorAndDepth(imageColormsg->image, depthImageFloat);
+      else if(cloud_tgt == NULL){
+         if(imagereceived1 && depthreceived1)
+          pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud_tgt = getCloudfromColorAndDepth(imageColormsg1->image, depthImageFloat1);
+  } else {
+     processRegistration();
+ }
 
 }
 
 
 void imageCb(const sensor_msgs::ImageConstPtr& msg)
-  {
+{
 	try
 	{
 		if(cloud_src==NULL){
-  			imageColormsg = cv_bridge::toCvCopy(msg, enc::BGR8);
-  			imagereceived=true;
-  		}
-  		else{
-  			imageColormsg1 = cv_bridge::toCvCopy(msg, enc::BGR8);
-  			imagereceived1=true;
-  		}
-	}
-	catch (cv_bridge::Exception& e)
-	{
-  		ROS_ERROR("cv_bridge exception: %s", e.what());
-  		return;
-	}
+         imageColormsg = cv_bridge::toCvCopy(msg, enc::BGR8);
+         imagereceived=true;
+     }
+     else{
+         imageColormsg1 = cv_bridge::toCvCopy(msg, enc::BGR8);
+         imagereceived1=true;
+     }
+ }
+ catch (cv_bridge::Exception& e)
+ {
+    ROS_ERROR("cv_bridge exception: %s", e.what());
+    return;
+}
 
-    std::cerr<<" imagecb: "<<msg->header.frame_id<<" : "<<msg->header.seq<<" : "<<msg->header.stamp<<std::endl;
-   
+std::cerr<<" imagecb: "<<msg->header.frame_id<<" : "<<msg->header.seq<<" : "<<msg->header.stamp<<std::endl;
 
-    if(imagereceived && depthreceived)
-    	if(cloud_src==NULL)
-    		pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud_src = getCloudfromColorAndDepth(imageColormsg->image, depthImageFloat);
-        else if(cloud_tgt == NULL){
-        	pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud_tgt = getCloudfromColorAndDepth(imageColormsg1->image, depthImageFloat1);
-        } else {
-        	processRegistration();
-        }
+
+if(imagereceived && depthreceived)
+ if(cloud_src==NULL)
+  pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud_src = getCloudfromColorAndDepth(imageColormsg->image, depthImageFloat);
+else if(cloud_tgt == NULL){
+ pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud_tgt = getCloudfromColorAndDepth(imageColormsg1->image, depthImageFloat1);
+} else {
+ processRegistration();
+}
 }
 
 
@@ -547,7 +543,7 @@ void callback(const PointCloud::ConstPtr& msg)
   printf ("Cloud: width = %d, height = %d\n", msg->width, msg->height);
 
   BOOST_FOREACH (const pcl::PointXYZ& pt, msg->points)
-    printf ("\t(%f, %f, %f)\n", pt.x, pt.y, pt.z);
+  printf ("\t(%f, %f, %f)\n", pt.x, pt.y, pt.z);
 }
 
 /*void detectKeypoints (const PointCloud::Ptr pcl_cloud, float min_scale, int nr_octaves, int nr_scales_per_octave)
@@ -589,12 +585,12 @@ void callback(const PointCloud::ConstPtr& msg)
 }*/
 
 
-
+};
 
 int main(int argc, char** argv){
-  ros::init(argc, argv, "sub_pcl");
-  ros::NodeHandle nh;
-  ros::Subscriber sub2 = nh.subscribe("/camera/rgb/image_color", 1, imageCb);
-  ros::Subscriber sub = nh.subscribe("/camera/depth/image", 1, imageCbdepth);
-  ros::spin();
+    ros::init(argc, argv, "sub_pcl");
+    ros::NodeHandle nh;
+    Prac2 prac2(nh);
+    prac2.bucle();
+    ros::spin();
 }
