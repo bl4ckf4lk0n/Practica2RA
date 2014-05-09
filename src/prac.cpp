@@ -26,6 +26,9 @@
 #include <pcl/features/pfh.h>
 #include <pcl/registration/icp.h>
 #include <pcl/sample_consensus/ransac.h>
+#include <pcl/sample_consensus/sac_model_plane.h>
+#include <pcl/sample_consensus/sac_model_sphere.h>
+#include <pcl/registration/correspondence_rejection_sample_consensus.h>
 
 
 using namespace cv;
@@ -107,24 +110,84 @@ class Prac2 {
         }
     }
 
-    void reducirNube(){
-        std::vector<int> indices1,indices2;
-        cloud_src->dense = false;
-        cloud_tgt->dense = false;
-        pcl::removeNaNFromPointCloud<pcl::PointXYZRGB>(*cloud_src, *cloud_src, indices1); 
-        pcl::removeNaNFromPointCloud<pcl::PointXYZRGB>(*cloud_tgt, *cloud_tgt, indices2); 
+     pcl::PointCloud<pcl::PointXYZRGB>::Ptr reducirNube(pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud){
+        std::vector<int> indices1;
+        cloud->is_dense = false;
+        pcl::removeNaNFromPointCloud<pcl::PointXYZRGB>(*cloud, *cloud, indices1);
 
-        pcl::PointCloud<pcl::PointXYZRGB>::Ptr ds_src (new pcl::PointCloud<pcl::PointXYZRGB>); 
-        pcl::PointCloud<pcl::PointXYZRGB>::Ptr ds_tgt (new pcl::PointCloud<pcl::PointXYZRGB>); 
+        pcl::PointCloud<pcl::PointXYZRGB>::Ptr ds_src (new pcl::PointCloud<pcl::PointXYZRGB>);
         pcl::VoxelGrid<pcl::PointXYZRGB> grid; 
         float voxel_side_size=0.02; //2cm
         grid.setLeafSize (voxel_side_size, voxel_side_size, voxel_side_size);
-        grid.setInputCloud (cloud_src); 
-        grid.filter (*ds_src); 
-        grid.setInputCloud (cloud_tgt); 
-        grid.filter (*ds_tgt); 
+        grid.setInputCloud (cloud); 
+        grid.filter (*ds_src);
+        return ds_src;
+        //visualizar(ds_src, ds_tgt);
+    }
 
-        visualizar(ds_src, ds_tgt);
+    pcl::PointCloud<pcl::Normal>::Ptr getNormals(pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud,  pcl::PointCloud<pcl::PointXYZRGB>::Ptr ds_src){
+        PCL_INFO ("Normal Estimation \n"); 
+        pcl::PointCloud<pcl::Normal>::Ptr norm_src (new pcl::PointCloud<pcl::Normal>);
+
+        pcl::search::KdTree<pcl::PointXYZRGB>::Ptr tree_src(new pcl::search::KdTree<pcl::PointXYZRGB>());
+
+        pcl::NormalEstimation<pcl::PointXYZRGB, pcl::Normal> ne; 
+                //Source-Cloud 
+        PCL_INFO (" Normal Estimation - Source \n");    
+        ne.setInputCloud (ds_src); 
+        ne.setSearchSurface (cloud); 
+        ne.setSearchMethod (tree_src); 
+        ne.setRadiusSearch (0.05); 
+        ne.compute (*norm_src);
+
+        return norm_src; 
+    }
+
+    pcl::PointCloud<pcl::PointXYZRGB>::Ptr extractSiftKeypoints(pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud){
+        float min_scale = 0.0005; 
+        int nr_octaves = 4; 
+        int nr_scales_per_octave = 5; 
+        float min_contrast = 1; 
+
+        pcl::SIFTKeypoint<pcl::PointXYZRGB, pcl::PointWithScale> sift;
+        pcl::search::KdTree<pcl::PointXYZRGB>::Ptr tree(new pcl::search::KdTree<pcl::PointXYZRGB> ());//new API
+        pcl::PointCloud<pcl::PointWithScale>::Ptr sifts (new pcl::PointCloud<pcl::PointWithScale>);
+        sift.setInputCloud(cloud);
+        sift.setSearchMethod (tree);
+        sift.setScales(min_scale, nr_octaves, nr_scales_per_octave);
+        sift.setMinimumContrast(min_contrast);
+        sift.compute(*sifts);
+
+        pcl::PointCloud<pcl::PointXYZRGB>::Ptr keypoints_src (new pcl::PointCloud<pcl::PointXYZRGB>); 
+        keypoints_src->width = sifts->points.size(); 
+        keypoints_src->height = 1; 
+        keypoints_src->is_dense = false; 
+        keypoints_src->points.resize (keypoints_src->width * keypoints_src->height);
+        //source XYZ-CLoud  
+        for (size_t i = 0; i < sifts->points.size(); i++) 
+        {
+            keypoints_src->points[i].x = sifts->points[i].x; 
+            keypoints_src->points[i].y = sifts->points[i].y; 
+            keypoints_src->points[i].z = sifts->points[i].z;
+
+            //falta meter lo de rgb
+        } 
+        return keypoints_src;
+    }
+
+    pcl::PointCloud<pcl::PFHSignature125>::Ptr createDescriptor(pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud, pcl::PointCloud<pcl::Normal>::Ptr norm_src, pcl::PointCloud<pcl::PointXYZRGB>::Ptr keypoints_src){
+         PCL_INFO ("PFH - started\n"); 
+         pcl::PFHEstimation<pcl::PointXYZRGB, pcl::Normal, pcl::PFHSignature125> pfh_est_src; 
+         pcl::search::KdTree<pcl::PointXYZRGB>::Ptr tree_pfh_src (new pcl::search::KdTree<pcl::PointXYZRGB>()); 
+         pfh_est_src.setSearchMethod (tree_pfh_src); 
+         pfh_est_src.setRadiusSearch (0.1); 
+         pfh_est_src.setSearchSurface (cloud);   
+         pfh_est_src.setInputNormals (norm_src); 
+         pfh_est_src.setInputCloud (keypoints_src); 
+         pcl::PointCloud<pcl::PFHSignature125>::Ptr pfh_src (new pcl::PointCloud<pcl::PFHSignature125>); 
+         PCL_INFO (" PFH - Compute Source\n"); 
+         pfh_est_src.compute (*pfh_src); 
+         PCL_INFO (" PFH - finished\n");
     }
 
     void processRegistration()
@@ -137,6 +200,32 @@ class Prac2 {
             viewer->addPointCloud(cloud_src,rgb,"cloud");
 
 
+        boost::shared_ptr<pcl::visualization::PCLVisualizer> MView (new pcl::visualization::PCLVisualizer ("Aligning")); 
+    MView->initCameraParameters (); 
+    //View-Port1 
+    int v1(0); 
+    MView->createViewPort (0.0, 0.0, 0.5, 1.0, v1); 
+    MView->setBackgroundColor (0, 0, 0, v1); 
+    MView->addText ("Start:View-Port 1", 10, 10, "v1_text", v1); 
+                        //PointCloud Farben...verschieben vor v1? 
+    pcl::visualization::PointCloudColorHandlerCustom<pcl::PointXYZRGB> green (cloud_src, 0,255,0); 
+    pcl::visualization::PointCloudColorHandlerCustom<pcl::PointXYZRGB> red (cloud_tgt, 255,0,0); 
+
+    MView->addPointCloud (cloud_src, green, "source", v1); 
+    MView->addPointCloud (cloud_tgt, red, "target", v1); 
+                        //View-Port2 
+    int v2(0); 
+    MView->createViewPort (0.5, 0.0, 1.0, 1.0, v2); 
+    MView->setBackgroundColor (0, 0, 0, v2); 
+    MView->addText ("Aligned:View-Port 2", 10, 10, "v2_text", v2); 
+    
+                        //MView->addPointCloud (cloud_tgt, red, "target2", v2); 
+                        //MView->addPointCloud (cloud_src, green, "source2", v2); 
+                //Properties for al viewports 
+    MView->setPointCloudRenderingProperties (pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 1, "source"); 
+    MView->setPointCloudRenderingProperties (pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 1, "target"); 
+                        //MView->setPointCloudRenderingProperties (pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 1, "target2");    
+    
         //while (!viewer->wasStopped())
         //{
             viewer->spinOnce (100);
@@ -145,7 +234,64 @@ class Prac2 {
 
         //visualizar(cloud_src, cloud_tgt);
 
-        reducirNube();
+        pcl::PointCloud<pcl::PointXYZRGB>::Ptr nube_src = reducirNube(cloud_src);
+        pcl::PointCloud<pcl::PointXYZRGB>::Ptr nube_tgt = reducirNube(cloud_tgt);
+
+        pcl::PointCloud<pcl::Normal>::Ptr normal_src = getNormals(cloud_src, nube_src);
+        pcl::PointCloud<pcl::Normal>::Ptr normal_tgt = getNormals(cloud_tgt, nube_tgt);
+
+        //falta meter los puntos de rgb en esta funcion
+        pcl::PointCloud<pcl::PointXYZRGB>::Ptr keypoints_src = extractSiftKeypoints(cloud_src);
+        pcl::PointCloud<pcl::PointXYZRGB>::Ptr keypoints_tgt = extractSiftKeypoints(cloud_tgt);
+
+        pcl::PointCloud<pcl::PFHSignature125>::Ptr descriptor_src = createDescriptor(cloud_src, normal_src, keypoints_src);
+        pcl::PointCloud<pcl::PFHSignature125>::Ptr descriptor_tgt = createDescriptor(cloud_tgt, normal_tgt, keypoints_tgt);
+
+        /*Correspondencias */
+        
+        pcl::registration::CorrespondenceEstimation<pcl::PFHSignature125, pcl::PFHSignature125> corEst; 
+        corEst.setInputCloud (descriptor_src); 
+        corEst.setInputTarget (descriptor_tgt); 
+        boost::shared_ptr<pcl::Correspondences> cor_all_ptr (new pcl::Correspondences); 
+        corEst.determineCorrespondences (*cor_all_ptr);
+        Eigen::Matrix4f transformation; 
+        PCL_INFO ("Correspondence Rejection Features\n"); 
+        //SAC 
+        double epsilon_sac = 0.1; // 10cm 
+        int iter_sac = 10000;
+        //pcl::SampleConsensusModelPlane<pcl::PointXYZRGB>::Ptr model_p (new pcl::SampleConsensusModelPlane<pcl::PointXYZRGB> (cloud_src));
+        //pcl::RandomSampleConsensus<pcl::PointXYZRGB> sac (model_p); 
+        pcl::registration::CorrespondenceRejectorSampleConsensus<pcl::PointXYZRGB> sac;
+        sac.setInputCloud (cloud_src); 
+        sac.setTargetCloud (cloud_tgt); 
+        sac.setInlierThreshold (epsilon_sac); 
+        sac.setMaxIterations (iter_sac); 
+        sac.setInputCorrespondences (cor_all_ptr); 
+
+        boost::shared_ptr<pcl::Correspondences> cor_inliers_ptr (new pcl::Correspondences); 
+        sac.getCorrespondences (*cor_inliers_ptr); 
+                //int sac_size = cor_inliers_ptr->size(); 
+        PCL_INFO (" RANSAC: %d Correspondences Remaining\n", cor_inliers_ptr->size ()); 
+
+        transformation = sac.getBestTransformation(); 
+
+                //pcl::registration::trans 
+                //pcl::registration::TransformationEstimation<pcl::PointXYZ, pcl::PointXYZ>::Ptr trans_est (new pcl::registration::TransformationEstimation<pcl::PointXYZ, pcl::PointXYZ>); 
+                //pcl:: 
+
+                //Punktwolke Transformieren 
+        pcl::transformPointCloud (*cloud_src, *cloud_tmp, transformation); 
+        MView->addPointCloud (cloud_tmp, green, "tmp", v2); 
+        MView->addPointCloud (cloud_tgt, red, "target_2", v2); 
+        MView->setPointCloudRenderingProperties (pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 1, "tmp"); 
+        MView->setPointCloudRenderingProperties (pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 1, "target_2"); 
+
+
+        // Warten bis Viewer geschlossen wird 
+        while (!MView->wasStopped()) 
+        { 
+            MView->spinOnce(100); 
+        } 
     }
 
 /*void processRegistration2(){
