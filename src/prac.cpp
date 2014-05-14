@@ -58,6 +58,7 @@ class Prac2 {
     ros::Subscriber imgSub;
     ros::Subscriber depthSub;
     pcl::visualization::PCLVisualizer::Ptr viewer;//objeto viewer
+    pcl::visualization::PCLVisualizer::Ptr viewer2;//objeto viewer
 
     public:Prac2(ros::NodeHandle& nh) {
         imgSub = nh.subscribe("/camera/rgb/image_color", 1, &Prac2::imageCb, this);
@@ -66,6 +67,10 @@ class Prac2 {
         viewer= pcl::visualization::PCLVisualizer::Ptr(new pcl::visualization::PCLVisualizer ("3D Viewer"));
         viewer->setBackgroundColor (0, 0, 0);
         viewer->initCameraParameters ();
+
+         viewer2= pcl::visualization::PCLVisualizer::Ptr(new pcl::visualization::PCLVisualizer ("3D Viewer"));
+        viewer2->setBackgroundColor (0, 0, 0);
+        viewer2->initCameraParameters ();
     };
 
 
@@ -166,6 +171,7 @@ class Prac2 {
         //source XYZ-CLoud  
         for (size_t i = 0; i < sifts->points.size(); i++) 
         {
+
             keypoints_src->points[i].x = sifts->points[i].x; 
             keypoints_src->points[i].y = sifts->points[i].y; 
             keypoints_src->points[i].z = sifts->points[i].z;
@@ -202,6 +208,11 @@ class Prac2 {
 
         if (!viewer->updatePointCloud (cloud_src,rgb, "cloud")) //intento actualizar la nube y si no existe la creo.
             viewer->addPointCloud(cloud_src,rgb,"cloud");
+
+        pcl::visualization::PointCloudColorHandlerRGBField<pcl::PointXYZRGB> rgb2(cloud_tgt);   //esto es el manejador de color de la nube "cloud"
+
+        if (!viewer2->updatePointCloud (cloud_tgt,rgb2, "cloud")) //intento actualizar la nube y si no existe la creo.
+            viewer2->addPointCloud(cloud_tgt,rgb2,"cloud");
 
 
         boost::shared_ptr<pcl::visualization::PCLVisualizer> MView (new pcl::visualization::PCLVisualizer ("Aligning")); 
@@ -288,6 +299,28 @@ class Prac2 {
         PCL_INFO (" RANSAC: %d Correspondences Remaining\n", cor_inliers_ptr->size ()); 
 
         transformation = sac.getBestTransformation(); 
+
+       /* Eigen::Affine3f transTotal;
+
+        ofstream myfile;
+
+        //inicilialización en constructor
+
+        transTotal.setIdentity();
+
+        myfile.open ("traj_estimated.txt");
+
+        //escribir en fichero la transformación estimada
+         transTotal=transTotal*transformation;
+         pcl::PointXYZRGB p0; //point at zero reference
+        p0.x=0; p0.y=0; p0.z=0; p0.r=255; p0.g=0; p0.b=0;
+          pcl::PointXYZRGB pt_trans=pcl::transformPoint<pcl::PointXYZRGB>(p0,transTotal); //estimated position of the camera
+        Eigen::Quaternion<float> rot2D( (transTotal).rotation());
+            myfile <<""<<depthmsg->header.stamp<<" "<<pt_trans.x<<" "<<pt_trans.y<<" "<<pt_trans.z<<" "<<rot2D.x()<<" "<<rot2D.y()<<" "<<rot2D.z()<<" "<<rot2D.w()<<std::endl;
+
+        //destructor
+
+        myfile.close();*/
 
                 //pcl::registration::trans 
                 //pcl::registration::TransformationEstimation<pcl::PointXYZ, pcl::PointXYZ>::Ptr trans_est (new pcl::registration::TransformationEstimation<pcl::PointXYZ, pcl::PointXYZ>); 
