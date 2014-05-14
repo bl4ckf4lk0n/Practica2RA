@@ -190,6 +190,8 @@ class Prac2 {
          PCL_INFO (" PFH - Compute Source\n"); 
          pfh_est_src.compute (*pfh_src); 
          PCL_INFO (" PFH - finished\n");
+
+         return pfh_src;
     }
 
     void processRegistration()
@@ -255,12 +257,15 @@ class Prac2 {
         pcl::PointCloud<pcl::PFHSignature125>::Ptr descriptor_src = createDescriptor(nube_src, normal_src, keypoints_src);
         pcl::PointCloud<pcl::PFHSignature125>::Ptr descriptor_tgt = createDescriptor(nube_tgt, normal_tgt, keypoints_tgt);
 
+
         /*Correspondencias */
         PCL_INFO ("Correspondence Estimation\n"); 
         pcl::registration::CorrespondenceEstimation<pcl::PFHSignature125, pcl::PFHSignature125> corEst; 
         corEst.setInputSource(descriptor_src); 
         corEst.setInputTarget(descriptor_tgt); 
         boost::shared_ptr<pcl::Correspondences> cor_all_ptr (new pcl::Correspondences);
+
+        //cout<<"Tamaño vector: "<<cor_all_ptr->size()<<endl;
         //peta aqui
         corEst.determineCorrespondences (*cor_all_ptr);
         Eigen::Matrix4f transformation; 
