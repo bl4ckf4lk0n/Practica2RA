@@ -227,8 +227,9 @@ class Prac2 {
         pcl::PointCloud<pcl::PointXYZRGB>::Ptr keypoints_src = extractSiftKeypoints(cloud_src);
         pcl::PointCloud<pcl::PFHSignature125>::Ptr descriptor_src = createDescriptor(nube_src, normal_src, keypoints_src);
 
-
-        if(!cloud_tgt->empty()){
+        cout<<"ok"<<endl;
+        if(!cloud_tgt->empty())
+        {
             pcl::visualization::PointCloudColorHandlerRGBField<pcl::PointXYZRGB> rgb2(cloud_tgt);   //esto es el manejador de color de la nube "cloud"
 
             if (!viewer2->updatePointCloud (cloud_tgt,rgb2, "cloud2")) //intento actualizar la nube y si no existe la creo.
@@ -298,8 +299,9 @@ class Prac2 {
             pcl::visualization::PointCloudColorHandlerCustom<pcl::PointXYZRGB> green (cloud_src, 0,255,0); 
             pcl::visualization::PointCloudColorHandlerCustom<pcl::PointXYZRGB> red (cloud_tgt, 255,0,0); 
 
-            MView->addPointCloud (cloud_src, green, "source", v1); 
-            MView->addPointCloud (cloud_tgt, red, "target", v1); 
+            //Cambiar rgb por red o green
+            MView->addPointCloud (cloud_src, rgb, "source", v1); 
+            MView->addPointCloud (cloud_tgt, rgb, "target", v1); 
                                 //View-Port2 
             int v2(0); 
             MView->createViewPort (0.5, 0.0, 1.0, 1.0, v2); 
@@ -320,9 +322,10 @@ class Prac2 {
             //}
 
                     //Punktwolke Transformieren 
+                 //Cambiar rgb por red o green
             pcl::transformPointCloud (*cloud_src, *cloud_tmp, transformation); 
-            MView->addPointCloud (cloud_tmp, green, "tmp", v2); 
-            MView->addPointCloud (cloud_tgt, red, "target_2", v2); 
+            MView->addPointCloud (cloud_tmp, rgb, "tmp", v2); 
+            MView->addPointCloud (cloud_tgt, rgb, "target_2", v2); 
             MView->setPointCloudRenderingProperties (pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 1, "tmp"); 
             MView->setPointCloudRenderingProperties (pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 1, "target_2"); 
 
@@ -334,8 +337,8 @@ class Prac2 {
             } 
         }
 
-        cloud_tgt = *cloud_src;
-        descriptor_tgt = *descriptor_src;
+        cloud_tgt = cloud_src;
+        descriptor_tgt = descriptor_src;
 
     }
 
@@ -698,11 +701,14 @@ class Prac2 {
          depthreceived=true;
         }
 
-     if(imagereceived && depthreceived){
-          cloud_src = getCloudfromColorAndDepth(imageColormsg->image, depthImageFloat);
-          imagereceived = false;
-          depthreceived = false;
-        processRegistration();
+        while(!imagereceived && !depthreceived);
+        
+       if(imagereceived && depthreceived){
+            cloud_src = getCloudfromColorAndDepth(imageColormsg->image, depthImageFloat);
+            imagereceived = false;
+            depthreceived = false;
+          processRegistration();
+      }
     }
 
 
@@ -723,13 +729,13 @@ class Prac2 {
 
         std::cerr<<" imagecb: "<<msg->header.frame_id<<" : "<<msg->header.seq<<" : "<<msg->header.stamp<<std::endl;
 
-
-        if(imagereceived && depthreceived){
+        while(!imagereceived && !depthreceived);
+        /*if(imagereceived && depthreceived){
             cloud_src = getCloudfromColorAndDepth(imageColormsg->image, depthImageFloat);
             imagereceived = false;
             depthreceived = false;
             processRegistration();
-        }
+        }*/
     }
 
 
