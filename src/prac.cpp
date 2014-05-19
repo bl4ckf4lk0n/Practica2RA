@@ -294,7 +294,7 @@ class Prac2 {
                 Eigen::Matrix4f transformation; 
                 PCL_INFO ("Correspondence Rejection Features\n"); 
                 //SAC 
-                double epsilon_sac = 0.1; // 10cm 
+                double epsilon_sac = 0.5; // 10cm 
                 int iter_sac = 10000;
                 //pcl::SampleConsensusModelPlane<pcl::PointXYZRGB>::Ptr model_p (new pcl::SampleConsensusModelPlane<pcl::PointXYZRGB> (cloud_src));
                 //pcl::RandomSampleConsensus<pcl::PointXYZRGB> sac (model_p); 
@@ -369,9 +369,14 @@ class Prac2 {
 
                         //Punktwolke Transformieren 
                      //Cambiar rgb por red o green
-                pcl::transformPointCloud (*cloud_src, *cloud_tgt, transformation); 
-                MView->addPointCloud (cloud_tgt, red, "tmp", v2); 
-                MView->addPointCloud (cloud_src, green, "target_2", v2); 
+                //pcl::transformPointCloud (*cloud_src, *cloud_tgt, transformation);
+
+
+                pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud_transformed (new pcl::PointCloud<pcl::PointXYZRGB>);
+                pcl::transformPointCloud (*cloud_src, *cloud_transformed,transformation);
+
+                MView->addPointCloud (cloud_transformed, green, "tmp", v2); 
+                MView->addPointCloud (cloud_tgt, red, "target_2", v2); 
                 MView->setPointCloudRenderingProperties (pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 1, "tmp"); 
                 MView->setPointCloudRenderingProperties (pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 1, "target_2"); 
 
