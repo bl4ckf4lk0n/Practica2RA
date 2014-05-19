@@ -28,6 +28,8 @@
 #include <pcl/sample_consensus/ransac.h>
 #include <pcl/sample_consensus/sac_model_plane.h>
 #include <pcl/sample_consensus/sac_model_sphere.h>
+
+#include <pcl/features/shot.h>
 #include <pcl/registration/correspondence_rejection_sample_consensus.h>
 
 
@@ -51,7 +53,7 @@ bool imagereceived1;
 pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud_src (new pcl::PointCloud<pcl::PointXYZRGB>); 
 pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud_tgt (new pcl::PointCloud<pcl::PointXYZRGB>); 
 pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud_tmp (new pcl::PointCloud<pcl::PointXYZRGB>);
-pcl::PointCloud<pcl::PFHSignature125>::Ptr descriptor_tgt;
+pcl::PointCloud<pcl::SHOT1344>::Ptr descriptor_tgt;
 
 
 
@@ -162,8 +164,8 @@ class Prac2 {
             pcl::search::OrganizedNeighbor<pcl::PointXYZRGB>::Ptr on(new pcl::search::OrganizedNeighbor<pcl::PointXYZRGB>());
             pcl::search::KdTree<pcl::PointXYZRGB>::Ptr tree(new pcl::search::KdTree<pcl::PointXYZRGB> ());
 
-             if(cloud_src->isOrganized() ){
-                 sift.setSearchMethod(on);
+            if(cloud_src->isOrganized() ){
+                 sift.setSearchMethod(tree);
             }else{
                  sift.setSearchMethod(tree);
             }
@@ -195,6 +197,32 @@ class Prac2 {
             throw ex;
         }
     }
+
+    pcl::PointCloud<pcl::SHOT1344>::Ptr createSHOTDescriptor( pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud, 
+                                                                pcl::PointCloud<pcl::Normal>::Ptr norm_src)
+{
+  // Setup the SHOT features
+  //typedef pcl::FPFHSignature33 ShotFeature; // Can't use this, even despite: http://docs.pointclouds.org/trunk/structpcl_1_1_f_p_f_h_signature33.html
+  PCL_INFO ("SHOT - started\n"); 
+  pcl::SHOTColorEstimation<pcl::PointXYZRGB, pcl::Normal, pcl::SHOT1344> shotEstimation;
+  pcl::search::KdTree<pcl::PointXYZRGB>::Ptr tree (new pcl::search::KdTree<pcl::PointXYZRGB>);
+  shotEstimation.setInputCloud(cloud);
+  shotEstimation.setInputNormals(norm_src);
+
+  // Use the same KdTree from the normal estimation
+  shotEstimation.setSearchMethod (tree);
+  pcl::PointCloud<pcl::SHOT1344>::Ptr shotFeatures(new pcl::PointCloud<pcl::SHOT1344>);
+  //spinImageEstimation.setRadiusSearch (0.2);
+  //shotEstimation.setKSearch(10);
+  shotEstimation.setKSearch(0);
+  shotEstimation.setRadiusSearch(1);
+
+  // Actually compute the spin images
+  PCL_INFO (" SHOT - Compute Source\n"); 
+  shotEstimation.compute (*shotFeatures);
+  PCL_INFO (" SHOT - finished\n");
+  return shotFeatures;
+}
 
     pcl::PointCloud<pcl::PFHSignature125>::Ptr createDescriptor(pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud, pcl::PointCloud<pcl::Normal>::Ptr norm_src, pcl::PointCloud<pcl::PointXYZRGB>::Ptr keypoints_src){
          PCL_INFO ("PFH - started\n"); 
@@ -234,14 +262,17 @@ class Prac2 {
             cloud_src->is_dense = false;
             pcl::removeNaNFromPointCloud<pcl::PointXYZRGB>(*cloud_src, *cloud_src, indices1);
 
-            pcl::PointCloud<pcl::PointXYZRGB>::Ptr nube_src = reducirNube(cloud_src);
+            //pcl::PointCloud<pcl::PointXYZRGB>::Ptr nube_src = reducirNube(cloud_src);
 
-            pcl::PointCloud<pcl::Normal>::Ptr normal_src = getNormals(cloud_src, nube_src);
 
             //falta meter los puntos de rgb en esta funcion
             pcl::PointCloud<pcl::PointXYZRGB>::Ptr keypoints_src = extractSiftKeypoints(cloud_src);
-            pcl::PointCloud<pcl::PFHSignature125>::Ptr descriptor_src = createDescriptor(nube_src, normal_src, keypoints_src);
 
+            cout<<"culo "<<keypoints_src->size()<<endl;
+            pcl::PointCloud<pcl::Normal>::Ptr normal_src = getNormals(keypoints_src, keypoints_src);
+
+            //pcl::PointCloud<pcl::PFHSignature125>::Ptr descriptor_src = createDescriptor(cloud_src, normal_src, keypoints_src);
+            pcl::PointCloud<pcl::SHOT1344>::Ptr descriptor_src = createSHOTDescriptor(keypoints_src, normal_src);
             cout<<"ok"<<endl;
             if(!cloud_tgt->empty())
             {
@@ -252,7 +283,7 @@ class Prac2 {
 
                 /*Correspondencias */
                 PCL_INFO ("Correspondence Estimation\n"); 
-                pcl::registration::CorrespondenceEstimation<pcl::PFHSignature125, pcl::PFHSignature125> corEst; 
+                pcl::registration::CorrespondenceEstimation<pcl::SHOT1344, pcl::SHOT1344> corEst; 
                 corEst.setInputSource(descriptor_src); 
                 corEst.setInputTarget(descriptor_tgt); 
                 boost::shared_ptr<pcl::Correspondences> cor_all_ptr (new pcl::Correspondences);
@@ -315,8 +346,8 @@ class Prac2 {
                 pcl::visualization::PointCloudColorHandlerCustom<pcl::PointXYZRGB> red (cloud_tgt, 255,0,0); 
 
                 //Cambiar rgb por red o green
-                MView->addPointCloud (cloud_src, rgb, "source", v1); 
-                MView->addPointCloud (cloud_tgt, rgb, "target", v1); 
+                MView->addPointCloud (cloud_tgt, red, "target", v1); 
+                MView->addPointCloud (cloud_src, green, "source", v1); 
                                     //View-Port2 
                 int v2(0); 
                 MView->createViewPort (0.5, 0.0, 1.0, 1.0, v2); 
@@ -338,9 +369,9 @@ class Prac2 {
 
                         //Punktwolke Transformieren 
                      //Cambiar rgb por red o green
-                pcl::transformPointCloud (*cloud_src, *cloud_tmp, transformation); 
-                MView->addPointCloud (cloud_tmp, rgb, "tmp", v2); 
-                MView->addPointCloud (cloud_tgt, rgb, "target_2", v2); 
+                pcl::transformPointCloud (*cloud_src, *cloud_tgt, transformation); 
+                MView->addPointCloud (cloud_tgt, red, "tmp", v2); 
+                MView->addPointCloud (cloud_src, green, "target_2", v2); 
                 MView->setPointCloudRenderingProperties (pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 1, "tmp"); 
                 MView->setPointCloudRenderingProperties (pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 1, "target_2"); 
 
@@ -719,6 +750,13 @@ class Prac2 {
         }
 
         while(!imagereceived && !depthreceived);
+
+        if(imagereceived && depthreceived){
+            cloud_src = getCloudfromColorAndDepth(imageColormsg->image, depthImageFloat);
+            imagereceived = false;
+            depthreceived = false;
+          processRegistration();
+      }
     }
 
 
@@ -741,12 +779,7 @@ class Prac2 {
 
         while(!imagereceived && !depthreceived);
 
-        if(imagereceived && depthreceived){
-            cloud_src = getCloudfromColorAndDepth(imageColormsg->image, depthImageFloat);
-            imagereceived = false;
-            depthreceived = false;
-          processRegistration();
-      }
+
         /*if(imagereceived && depthreceived){
             cloud_src = getCloudfromColorAndDepth(imageColormsg->image, depthImageFloat);
             imagereceived = false;
