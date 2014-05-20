@@ -32,6 +32,20 @@
 #include <pcl/features/shot.h>
 #include <pcl/registration/correspondence_rejection_sample_consensus.h>
 
+#include <limits>
+#include <fstream>
+#include <vector>
+#include <Eigen/Core>
+#include <pcl/point_types.h>
+#include <pcl/point_cloud.h>
+#include <pcl/io/pcd_io.h>
+#include <pcl/kdtree/kdtree_flann.h>
+#include <pcl/filters/passthrough.h>
+#include <pcl/filters/voxel_grid.h>
+#include <pcl/features/normal_3d.h>
+#include <pcl/features/fpfh.h>
+#include <pcl/registration/ia_ransac.h>
+
 
 using namespace cv;
 using namespace std;
@@ -54,6 +68,7 @@ pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud_src (new pcl::PointCloud<pcl::Point
 pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud_tgt (new pcl::PointCloud<pcl::PointXYZRGB>); 
 pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud_tmp (new pcl::PointCloud<pcl::PointXYZRGB>);
 pcl::PointCloud<pcl::SHOT1344>::Ptr descriptor_tgt;
+pcl::PointCloud<pcl::PointXYZRGB>::Ptr keypoints_tgt;
 
 
 
@@ -290,11 +305,13 @@ class Prac2 {
 
                 //cout<<"Tamaño vector: "<<cor_all_ptr->size()<<endl;
                 //peta aqui
-                corEst.determineCorrespondences (*cor_all_ptr);
+                //corEst.determineCorrespondences (*cor_all_ptr);
+                corEst.determineReciprocalCorrespondences (*cor_all_ptr);
+
                 Eigen::Matrix4f transformation; 
                 PCL_INFO ("Correspondence Rejection Features\n"); 
                 //SAC 
-                double epsilon_sac = 0.5; // 10cm 
+                double epsilon_sac = 0.1; // 10cm 
                 int iter_sac = 10000;
                 //pcl::SampleConsensusModelPlane<pcl::PointXYZRGB>::Ptr model_p (new pcl::SampleConsensusModelPlane<pcl::PointXYZRGB> (cloud_src));
                 //pcl::RandomSampleConsensus<pcl::PointXYZRGB> sac (model_p); 
@@ -311,6 +328,23 @@ class Prac2 {
                 PCL_INFO (" RANSAC: %d Correspondences Remaining\n", cor_inliers_ptr->size ()); 
 
                 transformation = sac.getBestTransformation();
+
+
+              // The Sample Consensus Initial Alignment (SAC-IA) registration routine and its parameters
+              pcl::SampleConsensusInitialAlignment<pcl::PointXYZRGB, pcl::PointXYZRGB, pcl::SHOT1344> sac_ia_;
+              sac_ia_.setMinSampleDistance (0.05f);
+              sac_ia_.setMaxCorrespondenceDistance (0.01f*0.01f);
+              sac_ia_.setMaximumIterations (500);
+              sac_ia_.setInputTarget (keypoints_tgt);
+              sac_ia_.setTargetFeatures (descriptor_tgt);
+              sac_ia_.setInputSource (keypoints_src);
+              sac_ia_.setSourceFeatures (descriptor_src);
+              pcl::PointCloud<pcl::PointXYZRGB> registration_output;
+              sac_ia_.align (registration_output);
+              transformation = sac_ia_.getFinalTransformation ();
+
+
+
 
                 Eigen::Affine3f transTotal;
 
@@ -373,10 +407,10 @@ class Prac2 {
 
 
                 pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud_transformed (new pcl::PointCloud<pcl::PointXYZRGB>);
-                pcl::transformPointCloud (*cloud_src, *cloud_transformed,transformation);
+                pcl::transformPointCloud (*cloud_tgt, *cloud_transformed,transformation);
 
                 MView->addPointCloud (cloud_transformed, green, "tmp", v2); 
-                MView->addPointCloud (cloud_tgt, red, "target_2", v2); 
+                MView->addPointCloud (cloud_src, red, "target_2", v2); 
                 MView->setPointCloudRenderingProperties (pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 1, "tmp"); 
                 MView->setPointCloudRenderingProperties (pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 1, "target_2"); 
 
@@ -390,6 +424,7 @@ class Prac2 {
 
             cloud_tgt = cloud_src;
             descriptor_tgt = descriptor_src;
+            keypoints_tgt = keypoints_src;
         } catch(Exception ex){
 
         }
