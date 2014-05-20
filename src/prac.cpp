@@ -76,6 +76,8 @@ pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud_tgt (new pcl::PointCloud<pcl::Point
 pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud_tmp (new pcl::PointCloud<pcl::PointXYZRGB>);
 pcl::PointCloud<pcl::SHOT1344>::Ptr descriptor_tgt;
 pcl::PointCloud<pcl::PointXYZRGB>::Ptr keypoints_tgt;
+ros::Time headerStamp;
+boost::shared_ptr<pcl::visualization::PCLVisualizer> MView;
 
 
 
@@ -96,6 +98,8 @@ class Prac2 {
          viewer2= pcl::visualization::PCLVisualizer::Ptr(new pcl::visualization::PCLVisualizer ("3D Viewer"));
         viewer2->setBackgroundColor (0, 0, 0);
         viewer2->initCameraParameters ();
+        MView = boost::shared_ptr<pcl::visualization::PCLVisualizer>(new pcl::visualization::PCLVisualizer ("Aligning")); 
+
     };
 
 
@@ -453,13 +457,12 @@ pcl::PointCloud<pcl::SHOT1344>::Ptr createSHOTDescriptor( pcl::PointCloud<pcl::P
                 p0.x=0; p0.y=0; p0.z=0; p0.r=255; p0.g=0; p0.b=0;
                   pcl::PointXYZRGB pt_trans=pcl::transformPoint<pcl::PointXYZRGB>(p0,transTotal); //estimated position of the camera
                 Eigen::Quaternion<float> rot2D( (transTotal).rotation());
-                    myfile <<""<<" "<<pt_trans.x<<" "<<pt_trans.y<<" "<<pt_trans.z<<" "<<rot2D.x()<<" "<<rot2D.y()<<" "<<rot2D.z()<<" "<<rot2D.w()<<std::endl;
+                    myfile <<""<<headerStamp<<" "<<pt_trans.x<<" "<<pt_trans.y<<" "<<pt_trans.z<<" "<<rot2D.x()<<" "<<rot2D.y()<<" "<<rot2D.z()<<" "<<rot2D.w()<<std::endl;
 
                 //destructor
 
                 myfile.close();
 
-                boost::shared_ptr<pcl::visualization::PCLVisualizer> MView (new pcl::visualization::PCLVisualizer ("Aligning")); 
                 MView->initCameraParameters (); 
                 //View-Port1 
                 int v1(0); 
@@ -876,11 +879,12 @@ pcl::PointCloud<pcl::SHOT1344>::Ptr createSHOTDescriptor( pcl::PointCloud<pcl::P
       {
         std::cerr<<" depthcb: "<<msg->header.frame_id<<" : "<<msg->header.seq<<" : "<<msg->header.stamp<<std::endl;
         if(!depthreceived){
+          headerStamp = msg->header.stamp;
          depthImageFloat = reinterpret_cast<const float*>(&msg->data[0]);
          depthreceived=true;
         }
 
-        //while(!imagereceived && !depthreceived);
+        while(!imagereceived && !depthreceived);
 
         if(imagereceived && depthreceived){
             cloud_src = getCloudfromColorAndDepth(imageColormsg->image, depthImageFloat);
@@ -908,7 +912,7 @@ pcl::PointCloud<pcl::SHOT1344>::Ptr createSHOTDescriptor( pcl::PointCloud<pcl::P
 
         std::cerr<<" imagecb: "<<msg->header.frame_id<<" : "<<msg->header.seq<<" : "<<msg->header.stamp<<std::endl;
 
-        //while(!imagereceived && !depthreceived);
+        while(!imagereceived && !depthreceived);
 
 
         /*if(imagereceived && depthreceived){
