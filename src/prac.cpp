@@ -299,8 +299,10 @@ class Prac2 {
                 /*Correspondencias */
                 PCL_INFO ("Correspondence Estimation\n"); 
                 pcl::registration::CorrespondenceEstimation<pcl::SHOT1344, pcl::SHOT1344> corEst; 
-                corEst.setInputSource(descriptor_src); 
-                corEst.setInputTarget(descriptor_tgt); 
+                // corEst.setInputSource(descriptor_src); 
+                // corEst.setInputTarget(descriptor_tgt); 
+                corEst.setInputSource(descriptor_tgt); 
+                corEst.setInputTarget(descriptor_src); 
                 boost::shared_ptr<pcl::Correspondences> cor_all_ptr (new pcl::Correspondences);
 
                 //cout<<"Tamaño vector: "<<cor_all_ptr->size()<<endl;
@@ -316,8 +318,8 @@ class Prac2 {
                 //pcl::SampleConsensusModelPlane<pcl::PointXYZRGB>::Ptr model_p (new pcl::SampleConsensusModelPlane<pcl::PointXYZRGB> (cloud_src));
                 //pcl::RandomSampleConsensus<pcl::PointXYZRGB> sac (model_p); 
                 pcl::registration::CorrespondenceRejectorSampleConsensus<pcl::PointXYZRGB> sac;
-                sac.setInputSource (cloud_src); 
-                sac.setInputTarget(cloud_tgt); 
+                sac.setInputSource (cloud_tgt); 
+                sac.setInputTarget(cloud_src); 
                 sac.setInlierThreshold (epsilon_sac); 
                 sac.setMaximumIterations (iter_sac); 
                 sac.setInputCorrespondences (cor_all_ptr); 
@@ -333,12 +335,12 @@ class Prac2 {
               // The Sample Consensus Initial Alignment (SAC-IA) registration routine and its parameters
               pcl::SampleConsensusInitialAlignment<pcl::PointXYZRGB, pcl::PointXYZRGB, pcl::SHOT1344> sac_ia_;
               sac_ia_.setMinSampleDistance (0.05f);
-              sac_ia_.setMaxCorrespondenceDistance (0.01f*0.01f);
+              sac_ia_.setMaxCorrespondenceDistance (0.01f);
               sac_ia_.setMaximumIterations (500);
-              sac_ia_.setInputTarget (keypoints_tgt);
-              sac_ia_.setTargetFeatures (descriptor_tgt);
-              sac_ia_.setInputSource (keypoints_src);
-              sac_ia_.setSourceFeatures (descriptor_src);
+              sac_ia_.setInputTarget (keypoints_src);
+              sac_ia_.setTargetFeatures (descriptor_src);
+              sac_ia_.setInputSource (keypoints_tgt);
+              sac_ia_.setSourceFeatures (descriptor_tgt);
               pcl::PointCloud<pcl::PointXYZRGB> registration_output;
               sac_ia_.align (registration_output);
               transformation = sac_ia_.getFinalTransformation ();
@@ -789,7 +791,7 @@ class Prac2 {
          depthreceived=true;
         }
 
-        while(!imagereceived && !depthreceived);
+        //while(!imagereceived && !depthreceived);
 
         if(imagereceived && depthreceived){
             cloud_src = getCloudfromColorAndDepth(imageColormsg->image, depthImageFloat);
@@ -817,7 +819,7 @@ class Prac2 {
 
         std::cerr<<" imagecb: "<<msg->header.frame_id<<" : "<<msg->header.seq<<" : "<<msg->header.stamp<<std::endl;
 
-        while(!imagereceived && !depthreceived);
+        //while(!imagereceived && !depthreceived);
 
 
         /*if(imagereceived && depthreceived){
