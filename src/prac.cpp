@@ -29,6 +29,13 @@
 #include <pcl/sample_consensus/sac_model_plane.h>
 #include <pcl/sample_consensus/sac_model_sphere.h>
 
+
+#include <pcl/keypoints/narf_keypoint.h>
+#include <pcl/keypoints/susan.h>
+#include <pcl/keypoints/harris_3d.h>
+#include <pcl/keypoints/harris_6d.h>
+#include <pcl/keypoints/agast_2d.h>
+
 #include <pcl/features/shot.h>
 #include <pcl/registration/correspondence_rejection_sample_consensus.h>
 
@@ -165,56 +172,138 @@ class Prac2 {
         return norm_src; 
     }
 
-    pcl::PointCloud<pcl::PointXYZRGB>::Ptr extractSiftKeypoints(pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud){
-        std::cerr<<"extracting keypoints"<<std::endl;
-        const float min_scale = 0.005;
-        const int nr_octaves = 4;
-        const int nr_scales_per_octave = 5;
-        const float min_contrast = 1;
- 
-        try{
-            pcl::SIFTKeypoint<pcl::PointXYZRGB, pcl::PointWithScale> sift;
-            //search
-
-            pcl::search::OrganizedNeighbor<pcl::PointXYZRGB>::Ptr on(new pcl::search::OrganizedNeighbor<pcl::PointXYZRGB>());
-            pcl::search::KdTree<pcl::PointXYZRGB>::Ptr tree(new pcl::search::KdTree<pcl::PointXYZRGB> ());
-
-            if(cloud_src->isOrganized() ){
-                 sift.setSearchMethod(tree);
-            }else{
-                 sift.setSearchMethod(tree);
-            }
-
-            pcl::PointCloud<pcl::PointWithScale>::Ptr sifts (new pcl::PointCloud<pcl::PointWithScale>);
-            sift.setInputCloud(cloud);
-            //sift.setSearchMethod (tree);
-            sift.setScales(min_scale, nr_octaves, nr_scales_per_octave);
-            sift.setMinimumContrast(min_contrast);
-            sift.compute(*sifts);
-
-            pcl::PointCloud<pcl::PointXYZRGB>::Ptr keypoints_src (new pcl::PointCloud<pcl::PointXYZRGB>); 
-            keypoints_src->width = sifts->points.size(); 
-            keypoints_src->height = 1; 
-            keypoints_src->is_dense = false; 
-            keypoints_src->points.resize (keypoints_src->width * keypoints_src->height);
-            //source XYZ-CLoud  
-            for (size_t i = 0; i < sifts->points.size(); i++) 
-            {
-
-                keypoints_src->points[i].x = sifts->points[i].x; 
-                keypoints_src->points[i].y = sifts->points[i].y; 
-                keypoints_src->points[i].z = sifts->points[i].z;
-
-                //falta meter lo de rgb
-            } 
-            return keypoints_src;
-        } catch (Exception ex){
-            throw ex;
-        }
+    pcl::PointCloud<pcl::PointUV> extractAgastKeypoints(pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud)
+    {
+      std::cerr<<"extracting keypoints with Agast"<<std::endl;
+      pcl::AgastKeypoint2D<pcl::PointXYZRGB> agast;
+      agast.setThreshold (30);
+      agast.setInputCloud (cloud);
+      pcl::PointCloud<pcl::PointUV> keypoints;
+      agast.compute (keypoints);
+      return keypoints;
     }
 
-    pcl::PointCloud<pcl::SHOT1344>::Ptr createSHOTDescriptor( pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud, 
-                                                                pcl::PointCloud<pcl::Normal>::Ptr norm_src)
+    pcl::PointCloud<pcl::PointXYZRGB>::Ptr extractHarris3DKeypoints(pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud)
+    {
+
+      std::cerr<<"extracting keypoints with Harris3D"<<std::endl;
+      pcl::HarrisKeypoint3D<pcl::PointXYZRGB,pcl::PointXYZI> detector; 
+      detector.setNonMaxSupression (true); 
+  detector.setRadius (20);    //Este parametro es pa tocarlo y bien
+
+  detector.setInputCloud(cloud); 
+  pcl::PointCloud<pcl::PointXYZI>::Ptr keypoints(new pcl::PointCloud<pcl::PointXYZI>());
+
+  detector.compute(*keypoints);
+
+  pcl::PointCloud<pcl::PointXYZRGB>::Ptr keypoints_src (new pcl::PointCloud<pcl::PointXYZRGB>); 
+  keypoints_src->width = keypoints->points.size(); 
+  keypoints_src->height = 1; 
+  keypoints_src->is_dense = false; 
+  keypoints_src->points.resize (keypoints_src->width * keypoints_src->height);
+  //source XYZ-CLoud  
+  for (size_t i = 0; i < keypoints->points.size(); i++) 
+  {
+    keypoints_src->points[i].x = keypoints->points[i].x; 
+    keypoints_src->points[i].y = keypoints->points[i].y; 
+    keypoints_src->points[i].z = keypoints->points[i].z;
+
+    //falta meter lo de rgb
+  } 
+  return keypoints_src;
+}
+
+pcl::PointCloud<pcl::PointXYZRGB>::Ptr extractHarris6DKeypoints(pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud)
+{
+
+  std::cerr<<"extracting keypoints with Harris6D"<<std::endl;
+  pcl::HarrisKeypoint6D<pcl::PointXYZRGB,pcl::PointXYZI> detector; 
+  detector.setNonMaxSupression (true); 
+  detector.setRadius (20);    //Este parametro es pa tocarlo y bien
+
+  detector.setInputCloud(cloud); 
+  pcl::PointCloud<pcl::PointXYZI>::Ptr keypoints(new pcl::PointCloud<pcl::PointXYZI>());
+
+  detector.compute(*keypoints);
+
+  pcl::PointCloud<pcl::PointXYZRGB>::Ptr keypoints_src (new pcl::PointCloud<pcl::PointXYZRGB>); 
+  keypoints_src->width = keypoints->points.size(); 
+  keypoints_src->height = 1; 
+  keypoints_src->is_dense = false; 
+  keypoints_src->points.resize (keypoints_src->width * keypoints_src->height);
+  //source XYZ-CLoud  
+  for (size_t i = 0; i < keypoints->points.size(); i++) 
+  {
+    keypoints_src->points[i].x = keypoints->points[i].x; 
+    keypoints_src->points[i].y = keypoints->points[i].y; 
+    keypoints_src->points[i].z = keypoints->points[i].z;
+  } 
+  return keypoints_src;
+}
+
+pcl::PointCloud<pcl::PointXYZRGB>::Ptr extractSUSANKeypoints(pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud)
+{
+
+  std::cerr<<"extracting keypoints with SUSAN"<<std::endl;
+  pcl::SUSANKeypoint<pcl::PointXYZRGB, pcl::PointXYZRGB>* susan3D = new pcl::SUSANKeypoint<pcl::PointXYZRGB, pcl::PointXYZRGB>;
+  susan3D->setInputCloud(cloud);
+  susan3D->setNonMaxSupression(true);
+  pcl::PointCloud<pcl::PointXYZRGB>::Ptr keypoints (new pcl::PointCloud<pcl::PointXYZRGB> ());
+  susan3D->compute(*keypoints);
+  return keypoints;
+}
+
+
+pcl::PointCloud<pcl::PointXYZRGB>::Ptr extractSiftKeypoints(pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud){
+  std::cerr<<"extracting keypoints"<<std::endl;
+  const float min_scale = 0.005;
+  const int nr_octaves = 4;
+  const int nr_scales_per_octave = 5;
+  const float min_contrast = 1;
+
+  try{
+    pcl::SIFTKeypoint<pcl::PointXYZRGB, pcl::PointWithScale> sift;
+            //search
+
+    pcl::search::OrganizedNeighbor<pcl::PointXYZRGB>::Ptr on(new pcl::search::OrganizedNeighbor<pcl::PointXYZRGB>());
+    pcl::search::KdTree<pcl::PointXYZRGB>::Ptr tree(new pcl::search::KdTree<pcl::PointXYZRGB> ());
+
+    if(cloud_src->isOrganized() ){
+     sift.setSearchMethod(tree);
+   }else{
+     sift.setSearchMethod(tree);
+   }
+
+   pcl::PointCloud<pcl::PointWithScale>::Ptr sifts (new pcl::PointCloud<pcl::PointWithScale>);
+   sift.setInputCloud(cloud);
+            //sift.setSearchMethod (tree);
+   sift.setScales(min_scale, nr_octaves, nr_scales_per_octave);
+   sift.setMinimumContrast(min_contrast);
+   sift.compute(*sifts);
+
+   pcl::PointCloud<pcl::PointXYZRGB>::Ptr keypoints_src (new pcl::PointCloud<pcl::PointXYZRGB>); 
+   keypoints_src->width = sifts->points.size(); 
+   keypoints_src->height = 1; 
+   keypoints_src->is_dense = false; 
+   keypoints_src->points.resize (keypoints_src->width * keypoints_src->height);
+            //source XYZ-CLoud  
+   for (size_t i = 0; i < sifts->points.size(); i++) 
+   {
+
+    keypoints_src->points[i].x = sifts->points[i].x; 
+    keypoints_src->points[i].y = sifts->points[i].y; 
+    keypoints_src->points[i].z = sifts->points[i].z;
+
+                //falta meter lo de rgb
+  } 
+  return keypoints_src;
+} catch (Exception ex){
+  throw ex;
+}
+}
+
+pcl::PointCloud<pcl::SHOT1344>::Ptr createSHOTDescriptor( pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud, 
+  pcl::PointCloud<pcl::Normal>::Ptr norm_src)
 {
   // Setup the SHOT features
   //typedef pcl::FPFHSignature33 ShotFeature; // Can't use this, even despite: http://docs.pointclouds.org/trunk/structpcl_1_1_f_p_f_h_signature33.html
