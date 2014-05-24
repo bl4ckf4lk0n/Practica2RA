@@ -74,10 +74,12 @@ bool imagereceived1;
 pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud_src (new pcl::PointCloud<pcl::PointXYZRGB>); 
 pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud_tgt (new pcl::PointCloud<pcl::PointXYZRGB>); 
 pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud_tmp (new pcl::PointCloud<pcl::PointXYZRGB>);
-pcl::PointCloud<pcl::SHOT1344>::Ptr descriptor_tgt;
+pcl::PointCloud<pcl::PFHSignature125>::Ptr descriptor_tgt;
 pcl::PointCloud<pcl::PointXYZRGB>::Ptr keypoints_tgt;
 ros::Time headerStamp;
 boost::shared_ptr<pcl::visualization::PCLVisualizer> MView;
+int v2(0); 
+int v1(0); 
 
 
 
@@ -170,30 +172,22 @@ class Prac2 {
         ne.setInputCloud (ds_src); 
         ne.setSearchSurface (cloud); 
         ne.setSearchMethod (tree_src);
-        ne.setRadiusSearch (0.02);
+        ne.setRadiusSearch (0.05);
         ne.compute (*norm_src);
 
         return norm_src; 
     }
 
-    pcl::PointCloud<pcl::PointUV> extractAgastKeypoints(pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud)
-    {
-      std::cerr<<"extracting keypoints with Agast"<<std::endl;
-      pcl::AgastKeypoint2D<pcl::PointXYZRGB> agast;
-      agast.setThreshold (30);
-      agast.setInputCloud (cloud);
-      pcl::PointCloud<pcl::PointUV> keypoints;
-      agast.compute (keypoints);
-      return keypoints;
-    }
 
     pcl::PointCloud<pcl::PointXYZRGB>::Ptr extractHarris3DKeypoints(pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud)
     {
 
       std::cerr<<"extracting keypoints with Harris3D"<<std::endl;
       pcl::HarrisKeypoint3D<pcl::PointXYZRGB,pcl::PointXYZI> detector; 
-      detector.setNonMaxSupression (true); 
-  detector.setRadius (20);    //Este parametro es pa tocarlo y bien
+      //detector.setNonMaxSupression (true); 
+  
+  detector.setRadius (0.04);
+  detector.setRadiusSearch (0.05); 
 
   detector.setInputCloud(cloud); 
   pcl::PointCloud<pcl::PointXYZI>::Ptr keypoints(new pcl::PointCloud<pcl::PointXYZI>());
@@ -222,9 +216,9 @@ pcl::PointCloud<pcl::PointXYZRGB>::Ptr extractHarris6DKeypoints(pcl::PointCloud<
 
   std::cerr<<"extracting keypoints with Harris6D"<<std::endl;
   pcl::HarrisKeypoint6D<pcl::PointXYZRGB,pcl::PointXYZI> detector; 
-  detector.setNonMaxSupression (true); 
-  detector.setRadius (20);    //Este parametro es pa tocarlo y bien
-
+  //detector.setNonMaxSupression (true); 
+  detector.setRadius (0.02);    //Este parametro es pa tocarlo y bien
+  detector.setRadiusSearch (0.03);
   detector.setInputCloud(cloud); 
   pcl::PointCloud<pcl::PointXYZI>::Ptr keypoints(new pcl::PointCloud<pcl::PointXYZI>());
 
@@ -273,7 +267,7 @@ pcl::PointCloud<pcl::PointXYZRGB>::Ptr extractSiftKeypoints(pcl::PointCloud<pcl:
     pcl::search::KdTree<pcl::PointXYZRGB>::Ptr tree(new pcl::search::KdTree<pcl::PointXYZRGB> ());
 
     if(cloud_src->isOrganized() ){
-     sift.setSearchMethod(tree);
+     sift.setSearchMethod(on);
    }else{
      sift.setSearchMethod(tree);
    }
@@ -336,11 +330,11 @@ pcl::PointCloud<pcl::SHOT1344>::Ptr createSHOTDescriptor( pcl::PointCloud<pcl::P
          PCL_INFO ("PFH - started\n"); 
          pcl::PFHEstimation<pcl::PointXYZRGB, pcl::Normal, pcl::PFHSignature125> pfh_est_src; 
          pcl::search::KdTree<pcl::PointXYZRGB>::Ptr tree_pfh_src (new pcl::search::KdTree<pcl::PointXYZRGB>());
-         std::cerr<<cloud->size()<<std::endl;
-         std::cerr<<norm_src->size()<<std::endl;
+         //std::cerr<<cloud->size()<<std::endl;
+         //std::cerr<<norm_src->size()<<std::endl;
          pfh_est_src.setSearchMethod (tree_pfh_src); 
-         pfh_est_src.setRadiusSearch (0.1); 
-         pfh_est_src.setSearchSurface (cloud);   
+         pfh_est_src.setRadiusSearch (0.5); 
+         pfh_est_src.setSearchSurface (keypoints_src);   
          pfh_est_src.setInputNormals (norm_src); 
          pfh_est_src.setInputCloud (keypoints_src); 
          pcl::PointCloud<pcl::PFHSignature125>::Ptr pfh_src (new pcl::PointCloud<pcl::PFHSignature125>); 
@@ -380,7 +374,7 @@ pcl::PointCloud<pcl::SHOT1344>::Ptr createSHOTDescriptor( pcl::PointCloud<pcl::P
             pcl::PointCloud<pcl::Normal>::Ptr normal_src = getNormals(keypoints_src, keypoints_src);
 
             //pcl::PointCloud<pcl::PFHSignature125>::Ptr descriptor_src = createDescriptor(cloud_src, normal_src, keypoints_src);
-            pcl::PointCloud<pcl::SHOT1344>::Ptr descriptor_src = createSHOTDescriptor(keypoints_src, normal_src);
+            pcl::PointCloud<pcl::PFHSignature125>::Ptr descriptor_src = createDescriptor(cloud_src, normal_src,keypoints_src );
             cout<<"ok"<<endl;
             if(!cloud_tgt->empty())
             {
@@ -391,7 +385,7 @@ pcl::PointCloud<pcl::SHOT1344>::Ptr createSHOTDescriptor( pcl::PointCloud<pcl::P
 
                 /*Correspondencias */
                 PCL_INFO ("Correspondence Estimation\n"); 
-                pcl::registration::CorrespondenceEstimation<pcl::SHOT1344, pcl::SHOT1344> corEst; 
+                pcl::registration::CorrespondenceEstimation<pcl::PFHSignature125, pcl::PFHSignature125> corEst; 
                 // corEst.setInputSource(descriptor_src); 
                 // corEst.setInputTarget(descriptor_tgt); 
                 corEst.setInputSource(descriptor_tgt); 
@@ -426,7 +420,7 @@ pcl::PointCloud<pcl::SHOT1344>::Ptr createSHOTDescriptor( pcl::PointCloud<pcl::P
 
 
               // The Sample Consensus Initial Alignment (SAC-IA) registration routine and its parameters
-              pcl::SampleConsensusInitialAlignment<pcl::PointXYZRGB, pcl::PointXYZRGB, pcl::SHOT1344> sac_ia_;
+              pcl::SampleConsensusInitialAlignment<pcl::PointXYZRGB, pcl::PointXYZRGB, pcl::PFHSignature125> sac_ia_;
               sac_ia_.setMinSampleDistance (0.05f);
               sac_ia_.setMaxCorrespondenceDistance (0.01f);
               sac_ia_.setMaximumIterations (500);
@@ -463,21 +457,29 @@ pcl::PointCloud<pcl::SHOT1344>::Ptr createSHOTDescriptor( pcl::PointCloud<pcl::P
 
                 myfile.close();
 
+                pcl::visualization::PointCloudColorHandlerCustom<pcl::PointXYZRGB> green (cloud_src, 255,0,0); 
+                pcl::visualization::PointCloudColorHandlerCustom<pcl::PointXYZRGB> red (cloud_tgt, 0,255,0);
+                pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud_transformed (new pcl::PointCloud<pcl::PointXYZRGB>);
+                pcl::transformPointCloud (*cloud_tgt, *cloud_transformed,transformation);
+
+                MView->updatePointCloud (cloud_transformed, green, "tmp"); 
+                MView->updatePointCloud (cloud_src, red, "target_2"); 
+                MView->updatePointCloud (cloud_src,red, "source");
+                //MView->updatePointCloud (cloud_src,red, "source",v1);
+                if (!MView->updatePointCloud (cloud_tgt,red, "target")){ //intento actualizar la nube y si no existe la creo.
+                
                 MView->initCameraParameters (); 
                 //View-Port1 
-                int v1(0); 
                 MView->createViewPort (0.0, 0.0, 0.5, 1.0, v1); 
                 MView->setBackgroundColor (0, 0, 0, v1); 
                 MView->addText ("Start:View-Port 1", 10, 10, "v1_text", v1); 
                                     //PointCloud Farben...verschieben vor v1? 
-                pcl::visualization::PointCloudColorHandlerCustom<pcl::PointXYZRGB> green (cloud_src, 0,255,0); 
-                pcl::visualization::PointCloudColorHandlerCustom<pcl::PointXYZRGB> red (cloud_tgt, 255,0,0); 
 
                 //Cambiar rgb por red o green
                 MView->addPointCloud (cloud_tgt, red, "target", v1); 
                 MView->addPointCloud (cloud_src, green, "source", v1); 
                                     //View-Port2 
-                int v2(0); 
+                
                 MView->createViewPort (0.5, 0.0, 1.0, 1.0, v2); 
                 MView->setBackgroundColor (0, 0, 0, v2); 
                 MView->addText ("Aligned:View-Port 2", 10, 10, "v2_text", v2); 
@@ -500,7 +502,6 @@ pcl::PointCloud<pcl::SHOT1344>::Ptr createSHOTDescriptor( pcl::PointCloud<pcl::P
                 //pcl::transformPointCloud (*cloud_src, *cloud_tgt, transformation);
 
 
-                pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud_transformed (new pcl::PointCloud<pcl::PointXYZRGB>);
                 pcl::transformPointCloud (*cloud_tgt, *cloud_transformed,transformation);
 
                 MView->addPointCloud (cloud_transformed, green, "tmp", v2); 
@@ -508,14 +509,16 @@ pcl::PointCloud<pcl::SHOT1344>::Ptr createSHOTDescriptor( pcl::PointCloud<pcl::P
                 MView->setPointCloudRenderingProperties (pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 1, "tmp"); 
                 MView->setPointCloudRenderingProperties (pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 1, "target_2"); 
 
+                }
 
                 // Warten bis Viewer geschlossen wird 
                 while (!MView->wasStopped()) 
                 { 
                     MView->spinOnce(100); 
                 } 
-            }
-
+                MView->resetStoppedFlag();
+            
+          }
             cloud_tgt = cloud_src;
             descriptor_tgt = descriptor_src;
             keypoints_tgt = keypoints_src;
@@ -584,9 +587,9 @@ pcl::PointCloud<pcl::SHOT1344>::Ptr createSHOTDescriptor( pcl::PointCloud<pcl::P
 
       if(imagereceived && depthreceived){
         cloud_src = getCloudfromColorAndDepth(imageColormsg->image, depthImageFloat);
+        processRegistration();
         imagereceived = false;
         depthreceived = false;
-        processRegistration();
       }
     }
 
